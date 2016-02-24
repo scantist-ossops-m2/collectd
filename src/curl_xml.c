@@ -71,6 +71,7 @@ typedef struct cx_namespace_s cx_namespace_t;
 struct cx_s /* {{{ */
 {
   char *instance;
+  char *plugin_name;
   char *host;
 
   char *url;
@@ -194,6 +195,7 @@ static void cx_free (void *arg) /* {{{ */
 
   sfree (db->buffer);
   sfree (db->instance);
+  sfree (db->plugin_name);
   sfree (db->host);
 
   sfree (db->url);
@@ -480,8 +482,7 @@ static int cx_handle_instance_xpath (xmlXPathContextPtr xpath_ctx, /* {{{ */
   return (0);
 } /* }}} int cx_handle_instance_xpath */
 
-static int  cx_handle_base_xpath (char const *plugin_instance, /* {{{ */
-    char const *host,
+static int  cx_handle_base_xpath (const cx_t *db, /* {{{ */
     xmlXPathContextPtr xpath_ctx, const data_set_t *ds,
     char *base_xpath, cx_xpath_t *xpath)
 {
@@ -521,10 +522,10 @@ static int  cx_handle_base_xpath (char const *plugin_instance, /* {{{ */
   /* set the values for the value_list */
   vl.values_len = ds->ds_num;
   sstrncpy (vl.type, xpath->type, sizeof (vl.type));
-  sstrncpy (vl.plugin, "curl_xml", sizeof (vl.plugin));
-  sstrncpy (vl.host, host, sizeof (vl.host));
-  if (plugin_instance != NULL)
-    sstrncpy (vl.plugin_instance, plugin_instance, sizeof (vl.plugin_instance));
+  sstrncpy (vl.plugin,(db->plugin_name != NULL)? db->plugin_name : "curl_xml", sizeof (vl.plugin));
+  sstrncpy (vl.host, cx_host(db), sizeof (vl.host));
+  if (db->instance != NULL)
+    sstrncpy (vl.plugin_instance, db->instance, sizeof (vl.plugin_instance));
 
   for (int i = 0; i < total_nodes; i++)
   {
@@ -565,7 +566,7 @@ static int cx_handle_parsed_xml(xmlDocPtr doc, /* {{{ */
     ds = plugin_get_ds (xpath->type);
 
     if ( (cx_check_type(ds, xpath) == 0) &&
-         (cx_handle_base_xpath(db->instance, cx_host (db),
+         (cx_handle_base_xpath(db,
                                xpath_ctx, ds, le->key, xpath) == 0) )
       status = 0; /* we got atleast one success */
 
@@ -961,6 +962,8 @@ static int cx_config_add_url (oconfig_item_t *ci) /* {{{ */
 
     if (strcasecmp ("Instance", child->key) == 0)
       status = cf_util_get_string (child, &db->instance);
+    else if (strcasecmp ("PluginName", child->key) == 0)
+      status = cf_util_get_string (child, &db->plugin_name);
     else if (strcasecmp ("Host", child->key) == 0)
       status = cf_util_get_string (child, &db->host);
     else if (strcasecmp ("User", child->key) == 0)
