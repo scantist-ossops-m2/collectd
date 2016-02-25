@@ -63,6 +63,7 @@ struct cj_key_s /* {{{ */
 struct cj_s /* {{{ */
 {
   char *instance;
+  char *plugin_name;
   char *host;
 
   char *sock;
@@ -429,6 +430,7 @@ static void cj_free (void *arg) /* {{{ */
   db->tree = NULL;
 
   sfree (db->instance);
+  sfree (db->plugin_name);
   sfree (db->host);
 
   sfree (db->sock);
@@ -709,6 +711,8 @@ static int cj_config_add_url (oconfig_item_t *ci) /* {{{ */
 
     if (strcasecmp ("Instance", child->key) == 0)
       status = cf_util_get_string (child, &db->instance);
+    else if (strcasecmp ("PluginName", child->key) == 0)
+      status = cf_util_get_string (child, &db->plugin_name);
     else if (strcasecmp ("Host", child->key) == 0)
       status = cf_util_get_string (child, &db->host);
     else if (db->url && strcasecmp ("User", child->key) == 0)
@@ -862,7 +866,8 @@ static void cj_submit (cj_t *db, cj_key_t *key, value_t *value) /* {{{ */
     sstrncpy (vl.type_instance, key->instance, sizeof (vl.type_instance));
 
   sstrncpy (vl.host, cj_host (db), sizeof (vl.host));
-  sstrncpy (vl.plugin, "curl_json", sizeof (vl.plugin));
+  sstrncpy (vl.plugin, (db->plugin_name != NULL) ? db->plugin_name : "curl_json",
+            sizeof (vl.plugin));
   sstrncpy (vl.plugin_instance, db->instance, sizeof (vl.plugin_instance));
   sstrncpy (vl.type, key->type, sizeof (vl.type));
 
