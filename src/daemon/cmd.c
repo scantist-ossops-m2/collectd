@@ -23,6 +23,7 @@
 
 #include "cmd.h"
 #include "collectd.h"
+#include "types_list.h"
 
 #include "common.h"
 #include <sys/un.h>
@@ -55,6 +56,13 @@ static void sig_usr1_handler(int __attribute__((unused)) signal) {
   pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
   pthread_create(&thread, &attr, do_flush, NULL);
   pthread_attr_destroy(&attr);
+}
+
+static void sig_hup_handler(int __attribute__((unused)) signal) {
+  if (reload_typesdb() == 0)
+    INFO("Types database reloaded by HUP signal.");
+  else
+    INFO("Types database reload failed.");
 }
 
 #if COLLECT_DAEMON
@@ -256,6 +264,14 @@ int main(int argc, char **argv) {
 
   if (sigaction(SIGUSR1, &sig_usr1_action, NULL) != 0) {
     ERROR("Error: Failed to install a signal handler for signal USR1: %s",
+          STRERRNO);
+    return 1;
+  }
+
+  struct sigaction sig_hup_action = {.sa_handler = sig_hup_handler};
+
+  if (sigaction(SIGHUP, &sig_hup_action, NULL) != 0) {
+    ERROR("Error: Failed to install a signal handler for signal HUP: %s",
           STRERRNO);
     return 1;
   }

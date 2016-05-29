@@ -31,6 +31,7 @@
 #include "common.h"
 #include "configfile.h"
 #include "plugin.h"
+#include "types_list.h"
 
 #include <netdb.h>
 #include <sys/types.h>
@@ -424,6 +425,8 @@ int run_loop(bool test_readall) {
     ERROR("Error: one or more plugin shutdown callbacks failed.");
     exit_status = 1;
   }
+
+  free_datasets();
 
   return exit_status;
 } /* int run_loop */
