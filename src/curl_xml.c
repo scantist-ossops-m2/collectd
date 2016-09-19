@@ -219,7 +219,7 @@ static void cx_free (void *arg) /* {{{ */
   sfree (db);
 } /* }}} void cx_free */
 
-static const char *cx_host (cx_t *db) /* {{{ */
+static const char *cx_host (const cx_t *db) /* {{{ */
 {
   if (db->host == NULL)
     return hostname_g;
