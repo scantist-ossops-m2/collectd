@@ -152,7 +152,7 @@ void latency_counter_add (latency_counter_t *lc, cdtime_t latency) /* {{{ */
   if (lc->max < latency)
     lc->max = latency;
 
-  /* A latency of _exactly_ 1.0 ms should be stored in the buffer 0, so
+  /* A latency of _exactly_ 1.0 ms is stored in the buffer 0, so
    * subtract one from the cdtime_t value so that exactly 1.0 ms get sorted
    * accordingly. */
   bin = (latency - 1) / lc->bin_width;
@@ -293,5 +293,88 @@ cdtime_t latency_counter_get_percentile (latency_counter_t *lc, /* {{{ */
       CDTIME_T_TO_DOUBLE (latency_interpolated));
   return (latency_interpolated);
 } /* }}} cdtime_t latency_counter_get_percentile */
+
+cdtime_t latency_counter_get_start_time (const latency_counter_t *lc) /* {{{ */
+{
+  if (lc == NULL)
+    return (0);
+
+  return lc->start_time;
+} /* }}} cdtime_t latency_counter_get_start_time */
+
+/*
+ * NAME
+ *  latency_counter_get_rate(counter,lower,upper,now)
+ *
+ * DESCRIPTION
+ *   Calculates rate of latency values fall within requested interval.
+ *   Interval specified as [lower,upper] (including boundaries).
+ *   When upper value is equal to 0 then interval is [lower, infinity).
+ */
+
+double latency_counter_get_rate (const latency_counter_t *lc, /* {{{ */
+        cdtime_t lower, cdtime_t upper, const cdtime_t now)
+{
+  cdtime_t lower_bin;
+  cdtime_t upper_bin;
+  double sum = 0;
+
+  if ((lc == NULL) || (lc->num == 0))
+    return (0);
+
+  if (lower < 1) {
+    //sum += lc->zero;
+    //lower = 1;
+    return (0);
+  }
+
+  if (upper && (upper < lower))
+    return (0);
+
+  /* A latency of _exactly_ 1.0 ms is stored in the buffer 0 */
+  lower_bin = (lower - 1) / lc->bin_width;
+
+  if (upper)
+    upper_bin = (upper - 1) / lc->bin_width;
+  else
+    upper_bin = HISTOGRAM_NUM_BINS - 1;
+
+  if (lower_bin >= HISTOGRAM_NUM_BINS)
+    lower_bin = HISTOGRAM_NUM_BINS - 1;
+
+  if (upper_bin >= HISTOGRAM_NUM_BINS) {
+    upper_bin = HISTOGRAM_NUM_BINS - 1;
+    upper = 0;
+  }
+
+  sum = 0;
+  for (size_t i = lower_bin; i <= upper_bin; i++)
+  {
+    sum += lc->histogram[i];
+  }
+
+  /* Approximate ratio of requests below "lower" */
+  cdtime_t lower_bin_boundary = lower_bin * lc->bin_width;
+
+  /* When bin width is 0.125 (for example), then bin 0 stores
+   * values for interval [0, 0.124) (excluding).
+   * With lower = 0.100, the ratio should be 0.099 / 0.125.
+   * I.e. ratio = 0.100 - 0.000 - 0.001
+   */
+  double ratio = (double)(lower - lower_bin_boundary - DOUBLE_TO_CDTIME_T(0.001))
+                  / (double)lc->bin_width;
+  sum -= ratio * lc->histogram[lower_bin];
+
+  /* Approximate ratio of requests above "upper" */
+  cdtime_t upper_bin_boundary = (upper_bin + 1) * lc->bin_width;
+  if (upper)
+  {
+    assert (upper <= upper_bin_boundary);
+    double ratio = (double)(upper_bin_boundary - upper) / (double)lc->bin_width;
+    sum -= ratio * lc->histogram[upper_bin];
+  }
+
+  return sum / (CDTIME_T_TO_DOUBLE (now - lc->start_time));
+} /* }}} double latency_counter_get_rate */
 
 /* vim: set sw=2 sts=2 et fdm=marker : */
