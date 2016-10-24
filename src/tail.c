@@ -34,7 +34,8 @@
 /*
  *  <Plugin tail>
  *    <File "/var/log/exim4/mainlog">
- *	Instance "exim"
+ *      Plugin "mail"
+ *      Instance "exim"
  *      Interval 60
  *	<Match>
  *	  Regex "S=([1-9][0-9]*)"
@@ -142,7 +143,8 @@ static int ctail_config_add_match_dstype (ctail_config_match_t *cm,
 } /* int ctail_config_add_match_dstype */
 
 static int ctail_config_add_match (cu_tail_match_t *tm,
-    const char *plugin_instance, oconfig_item_t *ci, cdtime_t interval)
+    const char *plugin_name, const char *plugin_instance,
+    oconfig_item_t *ci, cdtime_t interval)
 {
   ctail_config_match_t cm = { 0 };
   int status;
@@ -248,9 +250,9 @@ static int ctail_config_add_match (cu_tail_match_t *tm,
 
   if (status == 0)
   {
-    status = tail_match_add_match_simple (tm, cm.regex, cm.excluderegex,
-      cm.flags, "tail", plugin_instance, cm.type, cm.type_instance,
-      cm.latency, interval);
+    status = tail_match_add_match_simple (tm, cm.regex, cm.excluderegex, cm.flags,
+    (plugin_name != NULL) ? plugin_name : "tail", plugin_instance,
+    cm.type, cm.type_instance, cm.latency, interval);
 
     if (status != 0)
     {
@@ -271,6 +273,7 @@ static int ctail_config_add_file (oconfig_item_t *ci)
 {
   cu_tail_match_t *tm;
   cdtime_t interval = 0;
+  char *plugin_name = NULL;
   char *plugin_instance = NULL;
   int num_matches = 0;
 
@@ -293,13 +296,15 @@ static int ctail_config_add_file (oconfig_item_t *ci)
     oconfig_item_t *option = ci->children + i;
     int status = 0;
 
-    if (strcasecmp ("Instance", option->key) == 0)
+    if (strcasecmp ("Plugin", option->key) == 0)
+      status = cf_util_get_string (option, &plugin_name);
+    else if (strcasecmp ("Instance", option->key) == 0)
       status = cf_util_get_string (option, &plugin_instance);
     else if (strcasecmp ("Interval", option->key) == 0)
       cf_util_get_cdtime (option, &interval);
     else if (strcasecmp ("Match", option->key) == 0)
     {
-      status = ctail_config_add_match (tm, plugin_instance, option, interval);
+      status = ctail_config_add_match (tm, plugin_name, plugin_instance, option, interval);
       if (status == 0)
         num_matches++;
       /* Be mild with failed matches.. */
@@ -314,6 +319,7 @@ static int ctail_config_add_file (oconfig_item_t *ci)
       break;
   } /* for (i = 0; i < ci->children_num; i++) */
 
+  sfree (plugin_name);
   sfree (plugin_instance);
 
   if (num_matches == 0)
