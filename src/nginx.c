@@ -278,7 +278,6 @@ static int nginx_read (void)
 	  && (atoll (fields[2]) != 0))
       {
 	submit ("connections", "accepted", atoll (fields[0]));
-	submit ("connections", "handled", atoll (fields[1]));
 	submit ("connections", "failed", (atoll(fields[0]) - atoll (fields[1])));
 	submit ("nginx_requests", NULL, atoll (fields[2]));
       }
