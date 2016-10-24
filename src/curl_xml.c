@@ -54,6 +54,7 @@ struct cx_xpath_s /* {{{ */
   size_t values_len;
   char *instance_prefix;
   char *instance;
+  char *plugin_instance_from;
   int is_table;
   unsigned long magic;
 };
@@ -71,6 +72,7 @@ typedef struct cx_namespace_s cx_namespace_t;
 struct cx_s /* {{{ */
 {
   char *instance;
+  char *plugin_name;
   char *host;
 
   char *url;
@@ -149,6 +151,7 @@ static void cx_xpath_free (cx_xpath_t *xpath) /* {{{ */
   sfree (xpath->path);
   sfree (xpath->type);
   sfree (xpath->instance_prefix);
+  sfree (xpath->plugin_instance_from);
   sfree (xpath->instance);
   sfree (xpath->values);
   sfree (xpath);
@@ -194,6 +197,7 @@ static void cx_free (void *arg) /* {{{ */
 
   sfree (db->buffer);
   sfree (db->instance);
+  sfree (db->plugin_name);
   sfree (db->host);
 
   sfree (db->url);
@@ -215,7 +219,7 @@ static void cx_free (void *arg) /* {{{ */
   sfree (db);
 } /* }}} void cx_free */
 
-static const char *cx_host (cx_t *db) /* {{{ */
+static const char *cx_host (const cx_t *db) /* {{{ */
 {
   if (db->host == NULL)
     return hostname_g;
@@ -477,11 +481,63 @@ static int cx_handle_instance_xpath (xmlXPathContextPtr xpath_ctx, /* {{{ */
    * somewhere inside this structure. */
   xmlXPathFreeObject (instance_node_obj);
 
+  /* Part 2, handle PluginInstanceFrom */
+  instance_node_obj = NULL;
+  instance_node = NULL;
+
+  /* plugin_instance_from has to be an xpath expression */
+  if (xpath->plugin_instance_from != NULL)
+  {
+    int tmp_size;
+
+    instance_node_obj = cx_evaluate_xpath (xpath_ctx, BAD_CAST xpath->plugin_instance_from);
+    if (instance_node_obj == NULL)
+      return (-1); /* error is logged already */
+
+    instance_node = instance_node_obj->nodesetval;
+    tmp_size = (instance_node) ? instance_node->nodeNr : 0;
+
+    if (tmp_size <= 0)
+    {
+      WARNING ("curl_xml plugin: "
+          "relative xpath expression for 'PluginInstanceFrom' \"%s\" doesn't match "
+          "any of the nodes. Skipping the node.", xpath->plugin_instance_from);
+      xmlXPathFreeObject (instance_node_obj);
+      return (-1);
+    }
+
+    if (tmp_size > 1)
+    {
+      WARNING ("curl_xml plugin: "
+          "relative xpath expression for 'PluginInstanceFrom' \"%s\" is expected "
+          "to return only one text node. Skipping the node.", xpath->plugin_instance_from);
+      xmlXPathFreeObject (instance_node_obj);
+      return (-1);
+    }
+
+    /* ignoring the element if other than textnode/attribute */
+    if (cx_if_not_text_node(instance_node->nodeTab[0]))
+    {
+      WARNING ("curl_xml plugin: "
+          "relative xpath expression \"%s\" is expected to return only text node "
+          "which is not the case. Skipping the node.", xpath->plugin_instance_from);
+      xmlXPathFreeObject (instance_node_obj);
+      return (-1);
+    }
+
+    if (instance_node != NULL)
+      sstrncpy (vl->plugin_instance, (char *) xmlNodeGetContent(instance_node->nodeTab[0]),
+          sizeof (vl->plugin_instance));
+
+    /* Free `instance_node_obj' this late, because `instance_node' points to
+     * somewhere inside this structure. */
+    xmlXPathFreeObject (instance_node_obj);
+  } /* if (xpath->plugin_instance_from != NULL) */
+
   return (0);
 } /* }}} int cx_handle_instance_xpath */
 
-static int  cx_handle_base_xpath (char const *plugin_instance, /* {{{ */
-    char const *host,
+static int  cx_handle_base_xpath (const cx_t *db, /* {{{ */
     xmlXPathContextPtr xpath_ctx, const data_set_t *ds,
     char *base_xpath, cx_xpath_t *xpath)
 {
@@ -509,11 +565,11 @@ static int  cx_handle_base_xpath (char const *plugin_instance, /* {{{ */
   }
 
   /* If base_xpath returned multiple results, then */
-  /* Instance in the xpath block is required */
-  if (total_nodes > 1 && xpath->instance == NULL)
+  /* InstanceFrom or PluginInstanceFrom in the xpath block is required */ 
+  if (total_nodes > 1 && xpath->instance == NULL && xpath->plugin_instance_from == NULL)
   {
     ERROR ("curl_xml plugin: "
-             "InstanceFrom is must in xpath block since the base xpath expression \"%s\" "
+             "InstanceFrom or PluginInstanceFrom is must in xpath block since the base xpath expression \"%s\" "
              "returned multiple results. Skipping the xpath block...", base_xpath);
     return -1;
   }
@@ -521,16 +577,17 @@ static int  cx_handle_base_xpath (char const *plugin_instance, /* {{{ */
   /* set the values for the value_list */
   vl.values_len = ds->ds_num;
   sstrncpy (vl.type, xpath->type, sizeof (vl.type));
-  sstrncpy (vl.plugin, "curl_xml", sizeof (vl.plugin));
-  sstrncpy (vl.host, host, sizeof (vl.host));
-  if (plugin_instance != NULL)
-    sstrncpy (vl.plugin_instance, plugin_instance, sizeof (vl.plugin_instance));
+  sstrncpy (vl.plugin,(db->plugin_name != NULL)? db->plugin_name : "curl_xml", sizeof (vl.plugin));
+  sstrncpy (vl.host, cx_host(db), sizeof (vl.host));
 
   for (int i = 0; i < total_nodes; i++)
   {
     int status;
 
     xpath_ctx->node = base_nodes->nodeTab[i];
+
+    if (db->instance != NULL)
+      sstrncpy (vl.plugin_instance, db->instance, sizeof (vl.plugin_instance));
 
     status = cx_handle_instance_xpath (xpath_ctx, xpath, &vl,
         /* is_table = */ (total_nodes > 1));
@@ -565,7 +622,7 @@ static int cx_handle_parsed_xml(xmlDocPtr doc, /* {{{ */
     ds = plugin_get_ds (xpath->type);
 
     if ( (cx_check_type(ds, xpath) == 0) &&
-         (cx_handle_base_xpath(db->instance, cx_host (db),
+         (cx_handle_base_xpath(db,
                                xpath_ctx, ds, le->key, xpath) == 0) )
       status = 0; /* we got atleast one success */
 
@@ -750,6 +807,8 @@ static int cx_config_add_xpath (cx_t *db, oconfig_item_t *ci) /* {{{ */
       status = cf_util_get_string (child, &xpath->instance_prefix);
     else if (strcasecmp ("InstanceFrom", child->key) == 0)
       status = cf_util_get_string (child, &xpath->instance);
+    else if (strcasecmp ("PluginInstanceFrom", child->key) == 0)
+      status = cf_util_get_string (child, &xpath->plugin_instance_from);
     else if (strcasecmp ("ValuesFrom", child->key) == 0)
       status = cx_config_add_values ("ValuesFrom", xpath, child);
     else
@@ -961,6 +1020,8 @@ static int cx_config_add_url (oconfig_item_t *ci) /* {{{ */
 
     if (strcasecmp ("Instance", child->key) == 0)
       status = cf_util_get_string (child, &db->instance);
+    else if (strcasecmp ("Plugin", child->key) == 0)
+      status = cf_util_get_string (child, &db->plugin_name);
     else if (strcasecmp ("Host", child->key) == 0)
       status = cf_util_get_string (child, &db->host);
     else if (strcasecmp ("User", child->key) == 0)

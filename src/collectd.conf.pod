@@ -1853,6 +1853,7 @@ The B<curl_xml plugin> uses B<libcurl> (L<http://curl.haxx.se/>) and B<libxml2>
  <Plugin "curl_xml">
    <URL "http://localhost/stats.xml">
      Host "my_host"
+     #Plugin "curl_xml"
      Instance "some_instance"
      User "collectd"
      Password "thaiNg0I"
@@ -1893,8 +1894,14 @@ host name setting.
 
 =item B<Instance> I<Instance>
 
-Use I<Instance> as the plugin instance when submitting values. Defaults to an
-empty string (no plugin instance).
+Use I<Instance> as the plugin instance when submitting values.
+May be overridden by B<PluginInstanceFrom> option inside B<XPath> blocks.
+Defaults to an empty string (no plugin instance).
+
+=item B<Plugin> I<Plugin>
+
+Use I<Plugin> as the plugin name when submitting values.
+Defaults to 'curl_xml'.
 
 =item B<Namespace> I<Prefix> I<URL>
 
@@ -1965,9 +1972,19 @@ Specifies a XPath expression to use for determining the I<type instance>. The
 XPath expression must return exactly one element. The element's value is then
 used as I<type instance>, possibly prefixed with I<InstancePrefix> (see above).
 
-This value is required. As a special exception, if the "base XPath expression"
-(the argument to the B<XPath> block) returns exactly one argument, then this
-option may be omitted.
+=item B<PluginInstanceFrom> I<PluginInstanceFrom>
+
+Specifies a XPath expression to use for determining the I<plugin instance>. The
+XPath expression must return exactly one element. The element's value is then
+used as I<plugin instance>.
+
+=back
+
+If the "base XPath expression" (the argument to the B<XPath> block) returns
+exactly one argument, then I<InstanceFrom> and I<PluginInstanceFrom> may be omitted.
+Otherwise, at least one of I<InstanceFrom> or I<PluginInstanceFrom> is required.
+
+=over 4
 
 =item B<ValuesFrom> I<ValuesFrom> [I<ValuesFrom> ...]
 
