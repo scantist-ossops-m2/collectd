@@ -38,7 +38,11 @@
 struct fc_directory_conf_s
 {
   char *path;
+  char *plugin_name;
   char *instance;
+  char *files_size_type;
+  char *files_num_type;
+  char *type_instance;
 
   int options;
 
@@ -69,26 +73,47 @@ static void fc_submit_dir (const fc_directory_conf_t *dir)
   vl.values = values;
   vl.values_len = STATIC_ARRAY_SIZE (values);
   sstrncpy (vl.host, hostname_g, sizeof (vl.host));
-  sstrncpy (vl.plugin, "filecount", sizeof (vl.plugin));
-  sstrncpy (vl.plugin_instance, dir->instance, sizeof (vl.plugin_instance));
-  sstrncpy (vl.type, "files", sizeof (vl.type));
+  sstrncpy (vl.plugin,
+            (dir->plugin_name != NULL) ? dir->plugin_name : "filecount",
+            sizeof (vl.plugin));
+  if (dir->instance != NULL)
+    sstrncpy (vl.plugin_instance, dir->instance, sizeof (vl.plugin_instance));
+  if (dir->type_instance != NULL)
+    sstrncpy(vl.type_instance, dir->type_instance, sizeof(vl.type_instance));
 
-  plugin_dispatch_values (&vl);
+  if (dir->files_num_type == NULL || strlen(dir->files_num_type) > 0)
+  {
+    vl.values = &(value_t) { .gauge = (gauge_t) dir->files_num };
+    sstrncpy (vl.type,
+              (dir->files_num_type != NULL) ? dir->files_num_type : "files",
+              sizeof (vl.type));
+    plugin_dispatch_values (&vl);
+  }
 
-  values[0].gauge = (gauge_t) dir->files_size;
-  sstrncpy (vl.type, "bytes", sizeof (vl.type));
-
-  plugin_dispatch_values (&vl);
+  if (dir->files_size_type == NULL || strlen(dir->files_size_type) > 0)
+  {
+    vl.values = &(value_t) { .gauge = (gauge_t) dir->files_size };
+    sstrncpy (vl.type,
+              (dir->files_size_type != NULL) ? dir->files_size_type : "bytes",
+              sizeof (vl.type));
+    plugin_dispatch_values (&vl);
+  }
 } /* void fc_submit_dir */
 
 /*
  * Config:
  * <Plugin filecount>
  *   <Directory /path/to/dir>
+ *     Plugin "foo"
  *     Instance "foobar"
  *     Name "*.conf"
  *     MTime -3600
  *     Size "+10M"
+ *     Recursive true
+ *     IncludeHidden false
+ *     FilesSizeType "bytes"
+ *     FilesCountType "files"
+ *     TypeInstance "instance"
  *   </Directory>
  * </Plugin>
  *
@@ -110,9 +135,6 @@ static int fc_config_set_instance (fc_directory_conf_t *dir, const char *str)
 
   for (ptr = buffer; *ptr == '_'; ptr++)
     /* do nothing */;
-
-  if (*ptr == 0)
-    return (-1);
 
   copy = strdup (ptr);
   if (copy == NULL)
@@ -359,11 +381,11 @@ static int fc_config_add_dir (oconfig_item_t *ci)
     return (-1);
   }
 
-  fc_config_set_instance (dir, dir->path);
-
   dir->options = FC_RECURSIVE;
 
   dir->name = NULL;
+  dir->instance = NULL;
+  dir->type_instance = NULL;
   dir->mtime = 0;
   dir->size = 0;
 
@@ -372,7 +394,9 @@ static int fc_config_add_dir (oconfig_item_t *ci)
   {
     oconfig_item_t *option = ci->children + i;
 
-    if (strcasecmp ("Instance", option->key) == 0)
+    if (strcasecmp ("Plugin", option->key) == 0)
+      status = cf_util_get_string (option, &dir->plugin_name);
+    else if (strcasecmp ("Instance", option->key) == 0)
       status = fc_config_add_dir_instance (dir, option);
     else if (strcasecmp ("Name", option->key) == 0)
       status = fc_config_add_dir_name (dir, option);
@@ -384,6 +408,12 @@ static int fc_config_add_dir (oconfig_item_t *ci)
       status = fc_config_add_dir_option (dir, option, FC_RECURSIVE);
     else if (strcasecmp ("IncludeHidden", option->key) == 0)
       status = fc_config_add_dir_option (dir, option, FC_HIDDEN);
+    else if (strcasecmp ("FilesSizeType", option->key) == 0)
+      status = cf_util_get_string (option, &dir->files_size_type);
+    else if (strcasecmp ("FilesCountType", option->key) == 0)
+      status = cf_util_get_string (option, &dir->files_num_type);
+    else if (strcasecmp ("TypeInstance", option->key) == 0)
+      status = cf_util_get_string (option, &dir->type_instance);
     else
     {
       WARNING ("filecount plugin: fc_config_add_dir: "
@@ -394,6 +424,17 @@ static int fc_config_add_dir (oconfig_item_t *ci)
     if (status != 0)
       break;
   } /* for (ci->children) */
+
+  if (status == 0
+      && dir->instance == NULL
+      && fc_config_set_instance (dir, dir->path) != 0)
+  {
+    ERROR ("filecount plugin: strdup failed.");
+    status = -1;
+  }
+
+  if (strlen(dir->instance) == 0)
+    sfree(dir->instance);
 
   if (status == 0)
   {
@@ -417,8 +458,12 @@ static int fc_config_add_dir (oconfig_item_t *ci)
   if (status != 0)
   {
     sfree (dir->name);
+    sfree (dir->plugin_name);
     sfree (dir->instance);
     sfree (dir->path);
+    sfree (dir->files_size_type);
+    sfree (dir->files_num_type);
+    sfree (dir->type_instance);
     sfree (dir);
     return (-1);
   }
