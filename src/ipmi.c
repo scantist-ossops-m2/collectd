@@ -290,6 +290,24 @@ static void sensor_read_handler (ipmi_sensor_t *sensor,
   plugin_dispatch_values (&vl);
 } /* void sensor_read_handler */
 
+const char *c_ipmi_find_type_by_units (ipmi_sensor_t *sensor)
+{
+  if (ipmi_sensor_get_modifier_unit(sensor) != 0
+      || ipmi_sensor_get_rate_unit(sensor)  != 0)
+    return (NULL);
+
+  switch (ipmi_sensor_get_base_unit(sensor))
+  {
+    case IPMI_UNIT_TYPE_WATTS:
+      return ("power");
+      break;
+    default:
+      break;
+  }
+
+  return (NULL);
+} /* const char c_ipmi_find_type_by_units */
+
 static int sensor_list_add (c_ipmi_instance_t *st, ipmi_sensor_t *sensor)
 {
   ipmi_sensor_id_t sensor_id;
@@ -345,12 +363,15 @@ static int sensor_list_add (c_ipmi_instance_t *st, ipmi_sensor_t *sensor)
   sensor_name_ptr = sensor_name;
 
   DEBUG ("ipmi plugin: sensor_list_add: Found sensor `%s` of `%s`,"
-         " Type: %#x"
+         " Type: %#x Units: %#x / %#x / %#x"
          " Event reading type: %#x"
          " Direction: %#x"
          " Event support: %#x",
          sensor_name_ptr, st->name,
          ipmi_sensor_get_sensor_type (sensor),
+         ipmi_sensor_get_base_unit(sensor),
+         ipmi_sensor_get_modifier_unit(sensor),
+         ipmi_sensor_get_rate_unit(sensor),
          ipmi_sensor_get_event_reading_type(sensor),
          ipmi_sensor_get_sensor_direction(sensor),
          ipmi_sensor_get_event_support(sensor)
@@ -409,6 +430,26 @@ static int sensor_list_add (c_ipmi_instance_t *st, ipmi_sensor_t *sensor)
     case IPMI_SENSOR_TYPE_FAN:
       type = "fanspeed";
       break;
+
+    case IPMI_SENSOR_TYPE_OTHER_UNITS_BASED_SENSOR:
+      {
+        type = c_ipmi_find_type_by_units(sensor);
+        if (type == NULL)
+        {
+          INFO ("ipmi plugin: sensor_list_add: Ignore sensor `%s` of `%s`, "
+              "because I don't know how to handle its units (%#x / %#x / %#x). "
+              "Sensor type: (%#x, %s). "
+              "If you need this sensor, please file a bug report.",
+              sensor_name_ptr, st->name,
+              ipmi_sensor_get_base_unit(sensor),
+              ipmi_sensor_get_modifier_unit(sensor),
+              ipmi_sensor_get_rate_unit(sensor),
+              ipmi_sensor_get_sensor_type (sensor),
+              ipmi_sensor_get_sensor_type_string (sensor));
+          return (-1);
+        }
+        break;
+      }
 
     default:
       {
