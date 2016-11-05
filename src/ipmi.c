@@ -132,6 +132,8 @@ static void c_ipmi_log (os_handler_t *handler, const char *format, enum ipmi_log
             fprintf (stderr, "%s\n", msg);
             break;
 #endif
+          default:
+            break;
   }
 } /* void c_ipmi_log */
 
@@ -702,16 +704,19 @@ static int c_ipmi_thread_init (c_ipmi_instance_t *st)
     }
   }
 
-  ipmi_open_option_t open_option[2] = {
-    [0] = {
-      .option = IPMI_OPEN_OPTION_ALL,
-      { .ival = 1 }
-    },
-    [1] = {
-      .option = IPMI_OPEN_OPTION_USE_CACHE,
-      { .ival = 0 }
-    }
-  };
+  size_t open_option_num = 0;
+  ipmi_open_option_t open_option[2];
+
+  open_option[open_option_num].option = IPMI_OPEN_OPTION_ALL;
+  open_option[open_option_num].ival = 1;
+  open_option_num++;
+
+#ifdef IPMI_OPEN_OPTION_USE_CACHE
+  //This option appeared in OpenIPMI-2.0.17
+  open_option[open_option_num].option = IPMI_OPEN_OPTION_USE_CACHE;
+  open_option[open_option_num].ival = 0; /* Disable SDR cache in local file */
+  open_option_num++;
+#endif
 
   /*
    * NOTE: Domain names must be unique. There is static `domains_list` common
@@ -720,7 +725,7 @@ static int c_ipmi_thread_init (c_ipmi_instance_t *st)
   status = ipmi_open_domain (st->name, &connection, /* num_con = */ 1,
       domain_connection_change_handler, /* user data = */ (void *)st,
       /* domain_fully_up_handler = */ NULL, /* user data = */ NULL,
-      open_option, sizeof (open_option) / sizeof (open_option[0]),
+      open_option, open_option_num,
       &domain_id);
   if (status != 0)
   {
