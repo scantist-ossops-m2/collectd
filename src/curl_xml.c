@@ -526,8 +526,11 @@ static int cx_handle_instance_xpath (xmlXPathContextPtr xpath_ctx, /* {{{ */
     }
 
     if (instance_node != NULL)
-      sstrncpy (vl->plugin_instance, (char *) xmlNodeGetContent(instance_node->nodeTab[0]),
-          sizeof (vl->plugin_instance));
+    {
+      char *node_value = (char *) xmlNodeGetContent(instance_node->nodeTab[0]);
+      sstrncpy (vl->plugin_instance, node_value, sizeof (vl->plugin_instance));
+      sfree (node_value);
+    }
 
     /* Free `instance_node_obj' this late, because `instance_node' points to
      * somewhere inside this structure. */
