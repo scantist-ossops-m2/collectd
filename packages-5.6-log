@@ -1,0 +1,284 @@
+commit a911fca7ac427a94ea31b9e37a67e38e0bea0f50
+Merge: e13723d 89cfd39
+Author: Pavel Rochnyack <pavel2000@ngs.ru>
+Date:   Sat Jul 22 10:13:52 2017 +0700
+
+    Merge branch 'small-fix' into package-5.6
+    
+    Fixed sfree() before variable use
+
+commit 89cfd392f7d3edc77250ed511c21bb83de40a007
+Author: Pavel Rochnyack <pavel2000@ngs.ru>
+Date:   Sat Jul 22 01:06:58 2017 +0700
+
+    network: Fix free() before use
+
+commit e13723d1d8e676a7150a9b9ba8f449e7cfc982da
+Author: Pavel Rochnyack <pavel2000@ngs.ru>
+Date:   Wed Oct 26 12:16:01 2016 +0600
+
+    processes: Show real disk IO (Linux) in addition to process IO
+            Changed types:
+            ps_disk_octets -> ps_io_octets
+            ps_disk_ops -> ps_io_ops.
+    
+            Added 'ps_disk_octets' type.
+
+commit 66f32b1c78c6c6e012c58febd5dc66d90d17caea
+Merge: 857290b b60b8f5
+Author: Pavel Rochnyack <pavel2000@ngs.ru>
+Date:   Mon Oct 24 14:41:25 2016 +0600
+
+    Merge branch 'package-5.6-tail-plugins-pluginname' into package-5.6
+
+commit 857290ba37ae27fda639cf829c97b12bad2897d8
+Merge: 4846f04 e6e902a
+Author: Pavel Rochnyack <pavel2000@ngs.ru>
+Date:   Mon Oct 24 14:39:51 2016 +0600
+
+    Merge branch 'package-5.6-tail-dstype-latency-master' into package-5.6
+
+commit 4846f047aa3331ed9995f3bcfe00d0d1ed2fbaf3
+Merge: 7a7be37 97e6f18
+Author: Pavel Rochnyack <pavel2000@ngs.ru>
+Date:   Mon Oct 24 14:39:47 2016 +0600
+
+    Merge branch 'package-5.6-sighup-reload-types-1733' into package-5.6
+
+commit 7a7be37ed7b31ff0053e42ee39f0d069e5858de9
+Merge: efa4856 4dba235
+Author: Pavel Rochnyack <pavel2000@ngs.ru>
+Date:   Mon Oct 24 14:39:41 2016 +0600
+
+    Merge branch 'package-5.6-processes-1989' into package-5.6
+
+commit efa4856089d78b85bbb5d107e85e7a9b73922bd8
+Merge: 558a6a0 c6aff95
+Author: Pavel Rochnyack <pavel2000@ngs.ru>
+Date:   Mon Oct 24 14:39:35 2016 +0600
+
+    Merge branch 'package-5.6-nginx-connections-failed' into package-5.6
+
+commit 558a6a0f5c4488621654a2588943ccb03b938af9
+Merge: 01f38ef bad42f1
+Author: Pavel Rochnyack <pavel2000@ngs.ru>
+Date:   Mon Oct 24 14:39:30 2016 +0600
+
+    Merge branch 'package-5.6-memcached' into package-5.6
+
+commit 01f38ef7c2520d485fd895097a8d6d73969b639d
+Merge: e06b2fe 48544da
+Author: Pavel Rochnyack <pavel2000@ngs.ru>
+Date:   Mon Oct 24 14:39:23 2016 +0600
+
+    Merge branch 'package-5.6-filecount-pluginname-1979' into package-5.6
+
+commit e06b2fe3fd3517ebae477ffa3688529cc76845ee
+Merge: 7f49750 6be0c69
+Author: Pavel Rochnyack <pavel2000@ngs.ru>
+Date:   Mon Oct 24 14:39:16 2016 +0600
+
+    Merge branch 'package-5.6-curl-xml' into package-5.6
+
+commit b60b8f5bca2918c8f1331ddccdc0e7236bf6f806
+Author: Pavel Rochnyack <pavel2000@ngs.ru>
+Date:   Mon Sep 19 16:07:53 2016 +0600
+
+    'curl', 'memcachec', 'tail' and 'tail_csv' plugins: Use 'Plugin' as option name
+
+commit 1f0cc1ec1717f38df2b1ad98f1dee5de88bb9c1f
+Author: Pavel Rochnyack <pavel2000@ngs.ru>
+Date:   Sun Apr 24 20:54:29 2016 +0600
+
+    memcachec plugin: Allow custom plugin name for each Page block
+
+commit c3356fe4f4cd93eed224fd2339a8c78d70df749b
+Author: Pavel Rochnyack <pavel2000@ngs.ru>
+Date:   Sun Apr 24 20:16:21 2016 +0600
+
+    curl plugin: Allow custom plugin name for each Page block
+
+commit f0093377013f9390d7725ad18150943b03d73423
+Author: Pavel Rochnyack <pavel2000@ngs.ru>
+Date:   Sun Apr 24 20:00:40 2016 +0600
+
+    tail plugin: Allow custom plugin name for file instances
+
+commit 8c2dad84bd91fb702b571f00842ab8c5b902ee4e
+Author: Pavel Rochnyack <pavel2000@ngs.ru>
+Date:   Sun Apr 24 19:30:46 2016 +0600
+
+    tail_csv: Allow custom plugin name for file instances
+
+commit e6e902aa534bce3c7e080b2d2c7f3dd16c123c68
+Author: Pavel Rochnyack <pavel2000@ngs.ru>
+Date:   Mon Sep 19 23:32:54 2016 +0600
+
+    DSType latency: Improved after PR code review
+
+commit e0812c9505fe0c63181a6bc416bd6867625c2935
+Author: Pavel Rochnyack <pavel2000@ngs.ru>
+Date:   Sat May 7 23:26:15 2016 +0600
+
+    + liblatency: Added utils_latency_config code
+    + tail plugin: DSType Latency added
+
+commit 756c2919e6f28597c337f84b0ec102d8cefcbbff
+Author: Pavel Rochnyack <pavel2000@ngs.ru>
+Date:   Sat May 7 22:09:09 2016 +0600
+
+    + utils_latency: Cleaned latency_counter_get_rate() from debugging
+
+commit 7cce8d8739463f679856fb5c697a0e42ead26bda
+Author: Pavel Rochnyack <pavel2000@ngs.ru>
+Date:   Sat May 7 21:55:16 2016 +0600
+
+    + utils_latency: Added latency_counter_get_rate()
+
+commit 347038123276d8d0c6aec5f4d1a3f54762bf975c
+Author: Pavel Rochnyack <pavel2000@ngs.ru>
+Date:   Sat May 7 13:01:33 2016 +0600
+
+    + User_data destroy callback added to match_create_callback() in utils_match
+
+commit 97e6f183ad59712db93697f324266001d79f2d03
+Author: Pavel Rochnyack <pavel2000@ngs.ru>
+Date:   Mon May 30 00:22:25 2016 +0600
+
+    collectd: Reload TypesDB on HUP signal. Disable and obsolete plugin_unregister_data_set() as unsafe.
+
+commit bad42f111d7bbce9558a0e95753c41556b8350f8
+Author: Pavel Rochnyack <pavel2000@ngs.ru>
+Date:   Wed Oct 5 00:54:34 2016 +0600
+
+    memcached: Added Address option
+
+commit c6aff95aa985b080b9f66b773d285c81399a6eca
+Author: Pavel Rochnyack <pavel2000@ngs.ru>
+Date:   Mon Oct 24 13:26:16 2016 +0600
+
+    nginx plugin: Do not report 'handled' connections
+
+commit a5997ebb8bafa7935622df110002bb1a536007ef
+Author: Pavel Rochnyack <pavel2000@ngs.ru>
+Date:   Wed Mar 9 16:39:22 2016 +0600
+
+    nginx plugin: Report failed connections
+
+commit 4dba23585fc887a5eec89bd566d040ea7a2a9c6b
+Author: Pavel Rochnyack <pavel2000@ngs.ru>
+Date:   Thu Oct 13 10:41:39 2016 +0600
+
+    processes plugin: collect per-process open files count
+    
+    Closes: #836
+
+commit 1a007b7bbcd530c52c2757afcf0f3e690d6b5e00
+Author: Pavel Rochnyack <pavel2000@ngs.ru>
+Date:   Thu Oct 13 01:18:57 2016 +0600
+
+    processes plugin: Update all counters via ps_update_counter()
+    
+    This fix counting when matched processes are started and terminated often.
+
+commit 54a1a396d56bb3f6825c764fae89fe73382e58af
+Author: Pavel Rochnyack <pavel2000@ngs.ru>
+Date:   Wed Oct 12 22:37:57 2016 +0600
+
+    processes plugin: Code cleanup
+
+commit f6d2f3dad2284734ce1bc4f4379e46c326318612
+Author: Pavel Rochnyack <pavel2000@ngs.ru>
+Date:   Mon Oct 10 13:25:07 2016 +0600
+
+    processes plugin: Fix counters initialization / spikes
+    
+    processes plugin generates spikes on (re)start. That is caused by
+    wrong counter logic: When collectd (re)started, monitored processes,
+    which was started before collectd, have non-zero values in
+    cpu_user/cpu_system/vmem_minflt/vmem_majflt, so `want_init` is false.
+    What produces spike.
+    At other hand, processes which are started between read cycles, should
+    be fully accounted without initialization. So, we must skip only first
+    cycle for these counters.
+
+commit 3bac53808bb6d8633e4e2f7a45b5f3c7545830ea
+Author: Pavel Rochnyack <pavel2000@ngs.ru>
+Date:   Mon Oct 10 13:07:55 2016 +0600
+
+    processes plugin: Remove unused fields from structures
+    
+    Fields cpu_user, cpu_system, vmem_minflt, vmem_majflt are always equal to zero for new entries (which are passed to ps_list_add()).
+    Values of these fields are not used in `procstat_t` entries too. So, that can be safely removed.
+
+commit 98dc18015ddeffcc296d6b1da52af93912d701c6
+Author: Pavel Rochnyack <pavel2000@ngs.ru>
+Date:   Mon Oct 10 10:33:28 2016 +0600
+
+    processes plugin: Do not gather processes IO and context switch data when unneeded
+
+commit 48544da8cd90e855901c5b654e234f2701a44809
+Author: Pavel Rochnyack <pavel2000@ngs.ru>
+Date:   Sun Oct 9 20:28:52 2016 +0600
+
+    Filecount plugin: Custom values for reported plugin, type and type instance
+    
+    * Allow to set plugin name;
+    * Allow to set empty plugin instance;
+    * Allow to set metrics type: 'FilesSizeType' and 'FilesCountType' options;
+    * Allow to set metrics type instance
+
+commit 6be0c69711033cd540968ef457c073a3e5938e51
+Author: Pavel Rochnyack <pavel2000@ngs.ru>
+Date:   Mon Sep 19 15:28:30 2016 +0600
+
+    curl_xml: Rebased to top of master
+
+commit d166c38986791a56a2507df8fc481e8c418aa62a
+Author: Pavel Rochnyack <pavel2000@ngs.ru>
+Date:   Mon Sep 19 15:22:36 2016 +0600
+
+    curl_xml: Renamed 'PluginName' option to unified 'Plugin'.
+
+commit ca80c7cea9d8fd6e3d805f1746ac4fa841c84b02
+Author: Pavel Rochnyack <pavel2000@ngs.ru>
+Date:   Wed Feb 24 22:38:30 2016 +0700
+
+    * curl_xml: Changed documentation to match proposed changes.
+
+commit e86fd1099b326de906309c9447e3b33f67f21757
+Author: Pavel Rochnyack <pavel2000@ngs.ru>
+Date:   Wed Feb 24 20:20:42 2016 +0700
+
+    * curl_xml: Add ability to set plugin instance from XML data.
+
+commit f6bb2f524ef52b7d69d93115da99168d61b35ab4
+Author: Pavel Rochnyack <pavel2000@ngs.ru>
+Date:   Wed Feb 24 20:20:27 2016 +0700
+
+    * curl_xml: Add ability to set custom plugin name in collected data.
+
+commit 7f49750f7e2c70adf3024ca9ef5541b7170f1ed7
+Author: Pavel Rochnyack <pavel2000@ngs.ru>
+Date:   Mon Sep 19 15:44:22 2016 +0600
+
+    curl_json: Use 'Plugin' as option name.
+
+commit 7debbe5f61d5d7c983221074647b6d3df8ea3ef4
+Author: Pavel Rochnyack <pavel2000@ngs.ru>
+Date:   Thu Feb 25 21:44:02 2016 +0700
+
+    * curl_json: Added default configuration example for php-fpm status
+
+commit 0cc4cb95a53c9085d2f81d3ae4363cc6e7403fe6
+Author: Pavel Rochnyack <pavel2000@ngs.ru>
+Date:   Thu Feb 25 21:35:14 2016 +0700
+
+    * curl_json: Changed documentation to match proposed changes.
+
+commit e5fa43fab77d0b9ad0935a723d23b1c9d6717fcf
+Author: Pavel Rochnyack <pavel2000@ngs.ru>
+Date:   Thu Feb 25 21:31:46 2016 +0700
+
+    * curl_json: Add ability to set custom plugin name in collected data.
+
