@@ -1298,9 +1298,9 @@ static int parse_part_encr_aes256 (sockent_t *se, /* {{{ */
       /* in = */ NULL, /* in len = */ 0);
   if (err != 0)
   {
-    sfree (pea.username);
     ERROR ("network plugin: gcry_cipher_decrypt returned: %s. Username: %s",
         gcry_strerror (err), pea.username);
+    sfree (pea.username);
     return (-1);
   }
 
@@ -1323,8 +1323,6 @@ static int parse_part_encr_aes256 (sockent_t *se, /* {{{ */
 
   parse_packet (se, buffer + buffer_offset, payload_len,
       flags | PP_ENCRYPTED, pea.username);
-
-  /* XXX: Free pea.username?!? */
 
   /* Update return values */
   *ret_buffer =     buffer     + part_size;
