@@ -88,7 +88,7 @@ static int openvpn_strsplit(char *string, char **fields, size_t size) {
       break;
   }
 
-  return (i);
+  return i;
 } /* int openvpn_strsplit */
 
 /* dispatches number of users */
@@ -233,7 +233,7 @@ static int single_read(const char *name, FILE *fh) {
 
   read = 1;
 
-  return (read);
+  return read;
 } /* int single_read */
 
 /* for reading status version 1 */
@@ -284,12 +284,12 @@ static int multi1_read(const char *name, FILE *fh) {
   }
 
   if (ferror(fh))
-    return (0);
+    return 0;
 
   if (collect_user_count)
     numusers_submit(name, name, sum_users);
 
-  return (1);
+  return 1;
 } /* int multi1_read */
 
 /* for reading status version 2 */
@@ -344,7 +344,7 @@ static int multi2_read(const char *name, FILE *fh) {
     read = 1;
   }
 
-  return (read);
+  return read;
 } /* int multi2_read */
 
 /* for reading status version 3 */
@@ -399,7 +399,7 @@ static int multi3_read(const char *name, FILE *fh) {
     read = 1;
   }
 
-  return (read);
+  return read;
 } /* int multi3_read */
 
 /* for reading status version 4 */
@@ -454,7 +454,7 @@ static int multi4_read(const char *name, FILE *fh) {
     read = 1;
   }
 
-  return (read);
+  return read;
 } /* int multi4_read */
 
 /* read callback */
@@ -465,7 +465,7 @@ static int openvpn_read(void) {
   read = 0;
 
   if (vpn_num == 0)
-    return (0);
+    return 0;
 
   /* call the right read function for every status entry in the list */
   for (int i = 0; i < vpn_num; i++) {
@@ -506,7 +506,7 @@ static int openvpn_read(void) {
     read += vpn_read;
   }
 
-  return (read ? 0 : -1);
+  return read ? 0 : -1;
 } /* int openvpn_read */
 
 static int version_detect(const char *filename) {
@@ -517,14 +517,14 @@ static int version_detect(const char *filename) {
   /* Sanity checking. We're called from the config handling routine, so
    * better play it save. */
   if ((filename == NULL) || (*filename == 0))
-    return (0);
+    return 0;
 
   fh = fopen(filename, "r");
   if (fh == NULL) {
     char errbuf[1024];
     WARNING("openvpn plugin: Unable to read \"%s\": %s", filename,
             sstrerror(errno, errbuf, sizeof(errbuf)));
-    return (0);
+    return 0;
   }
 
   /* now search for the specific multimode data format */
@@ -589,7 +589,7 @@ static int openvpn_config(const char *key, const char *value) {
       WARNING("openvpn plugin: unable to detect status version, "
               "discarding status file \"%s\".",
               value);
-      return (1);
+      return 1;
     }
 
     status_file = sstrdup(value);
@@ -597,7 +597,7 @@ static int openvpn_config(const char *key, const char *value) {
       char errbuf[1024];
       WARNING("openvpn plugin: sstrdup failed: %s",
               sstrerror(errno, errbuf, sizeof(errbuf)));
-      return (1);
+      return 1;
     }
 
     /* it determines the file name as string starting at location filename + 1
@@ -619,7 +619,7 @@ static int openvpn_config(const char *key, const char *value) {
                 "different one.",
                 status_name);
         sfree(status_file);
-        return (1);
+        return 1;
       }
     }
 
@@ -630,7 +630,7 @@ static int openvpn_config(const char *key, const char *value) {
       ERROR("openvpn plugin: malloc failed: %s",
             sstrerror(errno, errbuf, sizeof(errbuf)));
       sfree(status_file);
-      return (1);
+      return 1;
     }
     temp->file = status_file;
     temp->version = status_version;
@@ -646,7 +646,7 @@ static int openvpn_config(const char *key, const char *value) {
       sfree(vpn_list);
       sfree(temp->file);
       sfree(temp);
-      return (1);
+      return 1;
     }
     vpn_list = tmp_list;
 
@@ -685,10 +685,10 @@ static int openvpn_config(const char *key, const char *value) {
       collect_individual_users = 1;
   } /* if (strcasecmp("CollectIndividualUsers", key) == 0) */
   else {
-    return (-1);
+    return -1;
   }
 
-  return (0);
+  return 0;
 } /* int openvpn_config */
 
 /* shutdown callback */
@@ -700,7 +700,7 @@ static int openvpn_shutdown(void) {
 
   sfree(vpn_list);
 
-  return (0);
+  return 0;
 } /* int openvpn_shutdown */
 
 static int openvpn_init(void) {
@@ -709,13 +709,13 @@ static int openvpn_init(void) {
     WARNING("OpenVPN plugin: Neither `CollectIndividualUsers', "
             "`CollectCompression', nor `CollectUserCount' is true. There's no "
             "data left to collect.");
-    return (-1);
+    return -1;
   }
 
   plugin_register_read("openvpn", openvpn_read);
   plugin_register_shutdown("openvpn", openvpn_shutdown);
 
-  return (0);
+  return 0;
 } /* int openvpn_init */
 
 void module_register(void) {
