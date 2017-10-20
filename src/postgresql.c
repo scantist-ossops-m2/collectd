@@ -140,6 +140,7 @@ typedef struct {
 	char *password;
 
 	char *instance;
+	char *plugin_name;
 
 	char *sslmode;
 
@@ -264,7 +265,9 @@ static c_psql_database_t *c_psql_database_new (const char *name)
 
 	db->instance   = sstrdup (name);
 
-	db->sslmode    = NULL;
+	db->plugin_name = NULL;
+
+	db->sslmode = NULL;
 
 	db->krbsrvname = NULL;
 
@@ -315,7 +318,9 @@ static void c_psql_database_delete (void *data)
 
 	sfree (db->instance);
 
-	sfree (db->sslmode);
+	sfree(db->plugin_name);
+
+	sfree(db->sslmode);
 
 	sfree (db->krbsrvname);
 
@@ -465,141 +470,138 @@ static PGresult *c_psql_exec_query_params (c_psql_database_t *db,
 } /* c_psql_exec_query_params */
 
 /* db->db_lock must be locked when calling this function */
-static int c_psql_exec_query (c_psql_database_t *db, udb_query_t *q,
-		udb_query_preparation_area_t *prep_area)
-{
-	PGresult *res;
+static int c_psql_exec_query(c_psql_database_t *db, udb_query_t *q,
+                             udb_query_preparation_area_t *prep_area) {
+  PGresult *res;
 
-	c_psql_user_data_t *data;
+  c_psql_user_data_t *data;
 
-	const char *host;
+  const char *host;
 
-	char **column_names;
-	char **column_values;
-	int    column_num;
+  char **column_names;
+  char **column_values;
+  int column_num;
 
-	int rows_num;
-	int status;
+  int rows_num;
+  int status;
 
-	/* The user data may hold parameter information, but may be NULL. */
-	data = udb_query_get_user_data (q);
+  /* The user data may hold parameter information, but may be NULL. */
+  data = udb_query_get_user_data(q);
 
-	/* Versions up to `3' don't know how to handle parameters. */
-	if (3 <= db->proto_version)
-		res = c_psql_exec_query_params (db, q, data);
-	else if ((NULL == data) || (0 == data->params_num))
-		res = c_psql_exec_query_noparams (db, q);
-	else {
-		log_err ("Connection to database \"%s\" (%s) does not support "
-				"parameters (protocol version %d) - "
-				"cannot execute query \"%s\".",
-				db->database, db->instance, db->proto_version,
-				udb_query_get_name (q));
-		return -1;
-	}
+  /* Versions up to `3' don't know how to handle parameters. */
+  if (3 <= db->proto_version)
+    res = c_psql_exec_query_params(db, q, data);
+  else if ((NULL == data) || (0 == data->params_num))
+    res = c_psql_exec_query_noparams(db, q);
+  else {
+    log_err("Connection to database \"%s\" (%s) does not support "
+            "parameters (protocol version %d) - "
+            "cannot execute query \"%s\".",
+            db->database, db->instance, db->proto_version,
+            udb_query_get_name(q));
+    return -1;
+  }
 
-	/* give c_psql_write() a chance to acquire the lock if called recursively
-	 * through dispatch_values(); this will happen if, both, queries and
-	 * writers are configured for a single connection */
-	pthread_mutex_unlock (&db->db_lock);
+  /* give c_psql_write() a chance to acquire the lock if called recursively
+   * through dispatch_values(); this will happen if, both, queries and
+   * writers are configured for a single connection */
+  pthread_mutex_unlock(&db->db_lock);
 
-	column_names = NULL;
-	column_values = NULL;
+  column_names = NULL;
+  column_values = NULL;
 
-	if (PGRES_TUPLES_OK != PQresultStatus (res)) {
-		pthread_mutex_lock (&db->db_lock);
+  if (PGRES_TUPLES_OK != PQresultStatus(res)) {
+    pthread_mutex_lock(&db->db_lock);
 
-		if ((CONNECTION_OK != PQstatus (db->conn))
-				&& (0 == c_psql_check_connection (db))) {
-			PQclear (res);
-			return c_psql_exec_query (db, q, prep_area);
-		}
+    if ((CONNECTION_OK != PQstatus(db->conn)) &&
+        (0 == c_psql_check_connection(db))) {
+      PQclear(res);
+      return c_psql_exec_query(db, q, prep_area);
+    }
 
-		log_err ("Failed to execute SQL query: %s",
-				PQerrorMessage (db->conn));
-		log_info ("SQL query was: %s",
-				udb_query_get_statement (q));
-		PQclear (res);
-		return -1;
-	}
+    log_err("Failed to execute SQL query: %s", PQerrorMessage(db->conn));
+    log_info("SQL query was: %s", udb_query_get_statement(q));
+    PQclear(res);
+    return -1;
+  }
 
-#define BAIL_OUT(status) \
-	sfree (column_names); \
-	sfree (column_values); \
-	PQclear (res); \
-	pthread_mutex_lock (&db->db_lock); \
-	return status
+#define BAIL_OUT(status)                                                       \
+  sfree(column_names);                                                         \
+  sfree(column_values);                                                        \
+  PQclear(res);                                                                \
+  pthread_mutex_lock(&db->db_lock);                                            \
+  return status
 
-	rows_num = PQntuples (res);
-	if (1 > rows_num) {
-		BAIL_OUT (0);
-	}
+  rows_num = PQntuples(res);
+  if (1 > rows_num) {
+    BAIL_OUT(0);
+  }
 
-	column_num = PQnfields (res);
-	column_names = (char **) calloc (column_num, sizeof (char *));
-	if (NULL == column_names) {
-		log_err ("calloc failed.");
-		BAIL_OUT (-1);
-	}
+  column_num = PQnfields(res);
+  column_names = (char **)calloc(column_num, sizeof(char *));
+  if (NULL == column_names) {
+    log_err("calloc failed.");
+    BAIL_OUT(-1);
+  }
 
-	column_values = (char **) calloc (column_num, sizeof (char *));
-	if (NULL == column_values) {
-		log_err ("calloc failed.");
-		BAIL_OUT (-1);
-	}
+  column_values = (char **)calloc(column_num, sizeof(char *));
+  if (NULL == column_values) {
+    log_err("calloc failed.");
+    BAIL_OUT(-1);
+  }
 
-	for (int col = 0; col < column_num; ++col) {
-		/* Pointers returned by `PQfname' are freed by `PQclear' via
-		 * `BAIL_OUT'. */
-		column_names[col] = PQfname (res, col);
-		if (NULL == column_names[col]) {
-			log_err ("Failed to resolve name of column %i.", col);
-			BAIL_OUT (-1);
-		}
-	}
+  for (int col = 0; col < column_num; ++col) {
+    /* Pointers returned by `PQfname' are freed by `PQclear' via
+     * `BAIL_OUT'. */
+    column_names[col] = PQfname(res, col);
+    if (NULL == column_names[col]) {
+      log_err("Failed to resolve name of column %i.", col);
+      BAIL_OUT(-1);
+    }
+  }
 
-	if (C_PSQL_IS_UNIX_DOMAIN_SOCKET (db->host)
-			|| (0 == strcmp (db->host, "127.0.0.1"))
-			|| (0 == strcmp (db->host, "localhost")))
-		host = hostname_g;
-	else
-		host = db->host;
+  if (C_PSQL_IS_UNIX_DOMAIN_SOCKET(db->host) ||
+      (0 == strcmp(db->host, "127.0.0.1")) ||
+      (0 == strcmp(db->host, "localhost")))
+    host = hostname_g;
+  else
+    host = db->host;
 
-	status = udb_query_prepare_result (q, prep_area, host, "postgresql",
-			db->instance, column_names, (size_t) column_num, db->interval);
-	if (0 != status) {
-		log_err ("udb_query_prepare_result failed with status %i.",
-				status);
-		BAIL_OUT (-1);
-	}
+  status = udb_query_prepare_result(
+      q, prep_area, host,
+      (db->plugin_name != NULL) ? db->plugin_name : "postgresql",
+      db->instance, column_names, (size_t)column_num, db->interval);
 
-	for (int row = 0; row < rows_num; ++row) {
-        int col;
-		for (col = 0; col < column_num; ++col) {
-			/* Pointers returned by `PQgetvalue' are freed by `PQclear' via
-			 * `BAIL_OUT'. */
-			column_values[col] = PQgetvalue (res, row, col);
-			if (NULL == column_values[col]) {
-				log_err ("Failed to get value at (row = %i, col = %i).",
-						row, col);
-				break;
-			}
-		}
+  if (0 != status) {
+    log_err("udb_query_prepare_result failed with status %i.", status);
+    BAIL_OUT(-1);
+  }
 
-		/* check for an error */
-		if (col < column_num)
-			continue;
+  for (int row = 0; row < rows_num; ++row) {
+    int col;
+    for (col = 0; col < column_num; ++col) {
+      /* Pointers returned by `PQgetvalue' are freed by `PQclear' via
+       * `BAIL_OUT'. */
+      column_values[col] = PQgetvalue(res, row, col);
+      if (NULL == column_values[col]) {
+        log_err("Failed to get value at (row = %i, col = %i).", row, col);
+        break;
+      }
+    }
 
-		status = udb_query_handle_result (q, prep_area, column_values);
-		if (status != 0) {
-			log_err ("udb_query_handle_result failed with status %i.",
-					status);
-		}
-	} /* for (row = 0; row < rows_num; ++row) */
+    /* check for an error */
+    if (col < column_num)
+      continue;
 
-	udb_query_finish_result (q, prep_area);
+    status = udb_query_handle_result(q, prep_area, column_values);
+    if (status != 0) {
+      log_err("udb_query_handle_result failed with status %i.", status);
+    }
+  } /* for (row = 0; row < rows_num; ++row) */
 
-	BAIL_OUT (0);
+  udb_query_finish_result(q, prep_area);
+
+  BAIL_OUT(0);
 #undef BAIL_OUT
 } /* c_psql_exec_query */
 
@@ -1171,126 +1173,121 @@ static int c_psql_config_writer (oconfig_item_t *ci)
 	return 0;
 } /* c_psql_config_writer */
 
-static int c_psql_config_database (oconfig_item_t *ci)
-{
-	c_psql_database_t *db;
 
-	char cb_name[DATA_MAX_NAME_LEN];
-	static _Bool have_flush = 0;
+static int c_psql_config_database(oconfig_item_t *ci) {
+  c_psql_database_t *db;
 
-	if ((1 != ci->values_num)
-			|| (OCONFIG_TYPE_STRING != ci->values[0].type)) {
-		log_err ("<Database> expects a single string argument.");
-		return 1;
-	}
+  char cb_name[DATA_MAX_NAME_LEN];
+  static _Bool have_flush = 0;
 
-	db = c_psql_database_new (ci->values[0].value.string);
-	if (db == NULL)
-		return -1;
+  if ((1 != ci->values_num) || (OCONFIG_TYPE_STRING != ci->values[0].type)) {
+    log_err("<Database> expects a single string argument.");
+    return 1;
+  }
 
-	for (int i = 0; i < ci->children_num; ++i) {
-		oconfig_item_t *c = ci->children + i;
+  db = c_psql_database_new(ci->values[0].value.string);
+  if (db == NULL)
+    return -1;
 
-		if (0 == strcasecmp (c->key, "Host"))
-			cf_util_get_string (c, &db->host);
-		else if (0 == strcasecmp (c->key, "Port"))
-			cf_util_get_service (c, &db->port);
-		else if (0 == strcasecmp (c->key, "User"))
-			cf_util_get_string (c, &db->user);
-		else if (0 == strcasecmp (c->key, "Password"))
-			cf_util_get_string (c, &db->password);
-		else if (0 == strcasecmp (c->key, "Instance"))
-			cf_util_get_string (c, &db->instance);
-		else if (0 == strcasecmp (c->key, "SSLMode"))
-			cf_util_get_string (c, &db->sslmode);
-		else if (0 == strcasecmp (c->key, "KRBSrvName"))
-			cf_util_get_string (c, &db->krbsrvname);
-		else if (0 == strcasecmp (c->key, "Service"))
-			cf_util_get_string (c, &db->service);
-		else if (0 == strcasecmp (c->key, "Query"))
-			udb_query_pick_from_list (c, queries, queries_num,
-					&db->queries, &db->queries_num);
-		else if (0 == strcasecmp (c->key, "Writer"))
-			config_add_writer (c, writers, writers_num,
-					&db->writers, &db->writers_num);
-		else if (0 == strcasecmp (c->key, "Interval"))
-			cf_util_get_cdtime (c, &db->interval);
-		else if (strcasecmp ("CommitInterval", c->key) == 0)
-			cf_util_get_cdtime (c, &db->commit_interval);
-		else if (strcasecmp ("ExpireDelay", c->key) == 0)
-			cf_util_get_cdtime (c, &db->expire_delay);
-		else
-			log_warn ("Ignoring unknown config key \"%s\".", c->key);
-	}
+  for (int i = 0; i < ci->children_num; ++i) {
+    oconfig_item_t *c = ci->children + i;
 
-	/* If no `Query' options were given, add the default queries.. */
-	if ((db->queries_num == 0) && (db->writers_num == 0)){
-		for (int i = 0; i < def_queries_num; i++)
-			udb_query_pick_from_list_by_name (def_queries[i],
-					queries, queries_num,
-					&db->queries, &db->queries_num);
-	}
+    if (0 == strcasecmp(c->key, "Host"))
+      cf_util_get_string(c, &db->host);
+    else if (0 == strcasecmp(c->key, "Port"))
+      cf_util_get_service(c, &db->port);
+    else if (0 == strcasecmp(c->key, "User"))
+      cf_util_get_string(c, &db->user);
+    else if (0 == strcasecmp(c->key, "Password"))
+      cf_util_get_string(c, &db->password);
+    else if (0 == strcasecmp(c->key, "Instance"))
+      cf_util_get_string(c, &db->instance);
+    else if (0 == strcasecmp (c->key, "Plugin"))
+      cf_util_get_string (c, &db->plugin_name);
+    else if (0 == strcasecmp(c->key, "SSLMode"))
+      cf_util_get_string(c, &db->sslmode);
+    else if (0 == strcasecmp(c->key, "KRBSrvName"))
+      cf_util_get_string(c, &db->krbsrvname);
+    else if (0 == strcasecmp(c->key, "Service"))
+      cf_util_get_string(c, &db->service);
+    else if (0 == strcasecmp(c->key, "Query"))
+      udb_query_pick_from_list(c, queries, queries_num, &db->queries,
+                               &db->queries_num);
+    else if (0 == strcasecmp(c->key, "Writer"))
+      config_add_writer(c, writers, writers_num, &db->writers,
+                        &db->writers_num);
+    else if (0 == strcasecmp(c->key, "Interval"))
+      cf_util_get_cdtime(c, &db->interval);
+    else if (strcasecmp("CommitInterval", c->key) == 0)
+      cf_util_get_cdtime(c, &db->commit_interval);
+    else if (strcasecmp("ExpireDelay", c->key) == 0)
+      cf_util_get_cdtime(c, &db->expire_delay);
+    else
+      log_warn("Ignoring unknown config key \"%s\".", c->key);
+  }
 
-	if (db->queries_num > 0) {
-		db->q_prep_areas = (udb_query_preparation_area_t **) calloc (
-				db->queries_num, sizeof (*db->q_prep_areas));
+  /* If no `Query' options were given, add the default queries.. */
+  if ((db->queries_num == 0) && (db->writers_num == 0)) {
+    for (int i = 0; i < def_queries_num; i++)
+      udb_query_pick_from_list_by_name(def_queries[i], queries, queries_num,
+                                       &db->queries, &db->queries_num);
+  }
 
-		if (db->q_prep_areas == NULL) {
-			log_err ("Out of memory.");
-			c_psql_database_delete (db);
-			return -1;
-		}
-	}
+  if (db->queries_num > 0) {
+    db->q_prep_areas = (udb_query_preparation_area_t **)calloc(
+        db->queries_num, sizeof(*db->q_prep_areas));
 
-	for (int i = 0; (size_t)i < db->queries_num; ++i) {
-		c_psql_user_data_t *data;
-		data = udb_query_get_user_data (db->queries[i]);
-		if ((data != NULL) && (data->params_num > db->max_params_num))
-			db->max_params_num = data->params_num;
+    if (db->q_prep_areas == NULL) {
+      log_err("Out of memory.");
+      c_psql_database_delete(db);
+      return -1;
+    }
+  }
 
-		db->q_prep_areas[i]
-			= udb_query_allocate_preparation_area (db->queries[i]);
+  for (int i = 0; (size_t)i < db->queries_num; ++i) {
+    c_psql_user_data_t *data;
+    data = udb_query_get_user_data(db->queries[i]);
+    if ((data != NULL) && (data->params_num > db->max_params_num))
+      db->max_params_num = data->params_num;
 
-		if (db->q_prep_areas[i] == NULL) {
-			log_err ("Out of memory.");
-			c_psql_database_delete (db);
-			return -1;
-		}
-	}
+    db->q_prep_areas[i] = udb_query_allocate_preparation_area(db->queries[i]);
 
-	ssnprintf (cb_name, sizeof (cb_name), "postgresql-%s", db->instance);
+    if (db->q_prep_areas[i] == NULL) {
+      log_err("Out of memory.");
+      c_psql_database_delete(db);
+      return -1;
+    }
+  }
 
-	user_data_t ud = {
-		.data = db,
-		.free_func = c_psql_database_delete
-	};
+  ssnprintf(cb_name, sizeof(cb_name), "postgresql-%s", db->instance);
 
-	if (db->queries_num > 0) {
-		++db->ref_cnt;
-		plugin_register_complex_read ("postgresql", cb_name, c_psql_read,
-				/* interval = */ db->interval, &ud);
-	}
-	if (db->writers_num > 0) {
-		++db->ref_cnt;
-		plugin_register_write (cb_name, c_psql_write, &ud);
+  user_data_t ud = {.data = db, .free_func = c_psql_database_delete};
 
-		if (! have_flush) {
-			/* flush all */
-			plugin_register_flush ("postgresql",
-					c_psql_flush, /* user data = */ NULL);
-			have_flush = 1;
-		}
+  if (db->queries_num > 0) {
+    ++db->ref_cnt;
+    plugin_register_complex_read("postgresql", cb_name, c_psql_read,
+                                 /* interval = */ db->interval, &ud);
+  }
+  if (db->writers_num > 0) {
+    ++db->ref_cnt;
+    plugin_register_write(cb_name, c_psql_write, &ud);
 
-		/* flush this connection only */
-		++db->ref_cnt;
-		plugin_register_flush (cb_name, c_psql_flush, &ud);
-	}
-	else if (db->commit_interval > 0) {
-		log_warn ("Database '%s': You do not have any writers assigned to "
-				"this database connection. Setting 'CommitInterval' does "
-				"not have any effect.", db->database);
-	}
-	return 0;
+    if (!have_flush) {
+      /* flush all */
+      plugin_register_flush("postgresql", c_psql_flush, /* user data = */ NULL);
+      have_flush = 1;
+    }
+
+    /* flush this connection only */
+    ++db->ref_cnt;
+    plugin_register_flush(cb_name, c_psql_flush, &ud);
+  } else if (db->commit_interval > 0) {
+    log_warn("Database '%s': You do not have any writers assigned to "
+             "this database connection. Setting 'CommitInterval' does "
+             "not have any effect.",
+             db->database);
+  }
+  return 0;
 } /* c_psql_config_database */
 
 static int c_psql_config (oconfig_item_t *ci)
