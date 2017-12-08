@@ -3352,6 +3352,7 @@ then
 	AC_SUBST(BUILD_WITH_LIBMNL_CFLAGS)
 	AC_SUBST(BUILD_WITH_LIBMNL_LIBS)
 fi
+AM_CONDITIONAL([HAVE_LIBMNL], [test "x$with_libmnl" = "xyes"])
 AM_CONDITIONAL(BUILD_WITH_LIBMNL, test "x$with_libmnl" = "xyes")
 # }}}
 
