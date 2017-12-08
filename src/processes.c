@@ -904,7 +904,7 @@ static void ps_submit_proc_list(procstat_t *ps) {
     if (isnan(delay_metrics[i].rate_ns)) {
       continue;
     }
-    sstrncpy(vl.type, "percent", sizeof(vl.type));
+    sstrncpy(vl.type, "ps_delay", sizeof(vl.type));
     sstrncpy(vl.type_instance, delay_metrics[i].type_instance,
              sizeof(vl.type_instance));
     vl.values[0].gauge = delay_metrics[i].rate_ns * delay_factor;
