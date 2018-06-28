@@ -28,6 +28,7 @@
 #ifndef UTILS_LATENCY_CONFIG_H
 #define UTILS_LATENCY_CONFIG_H 1
 
+#include "liboconfig/oconfig.h"
 #include "utils_time.h"
 #include "collectd.h"
 
