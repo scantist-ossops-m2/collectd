@@ -31,8 +31,8 @@ extern char **conf_typesdb;
 extern size_t conf_typesdb_num;
 
 void free_datasets();
-const data_set_t *get_dataset (const char *type);
-int merge_dataset (data_set_t *ds);
-int reload_typesdb (void);
+const data_set_t *get_dataset(const char *type);
+int merge_dataset(data_set_t *ds);
+int reload_typesdb(void);
 
 #endif /* TYPES_LIST_H */

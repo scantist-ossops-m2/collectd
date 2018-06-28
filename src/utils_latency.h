@@ -31,21 +31,20 @@
 struct latency_counter_s;
 typedef struct latency_counter_s latency_counter_t;
 
-latency_counter_t *latency_counter_create (void);
-void latency_counter_destroy (latency_counter_t *lc);
+latency_counter_t *latency_counter_create(void);
+void latency_counter_destroy(latency_counter_t *lc);
 
-void latency_counter_add (latency_counter_t *lc, cdtime_t latency);
-void latency_counter_reset (latency_counter_t *lc);
+void latency_counter_add(latency_counter_t *lc, cdtime_t latency);
+void latency_counter_reset(latency_counter_t *lc);
 
-cdtime_t latency_counter_get_min (latency_counter_t *lc);
-cdtime_t latency_counter_get_max (latency_counter_t *lc);
-cdtime_t latency_counter_get_sum (latency_counter_t *lc);
-size_t   latency_counter_get_num (latency_counter_t *lc);
-cdtime_t latency_counter_get_average (latency_counter_t *lc);
-cdtime_t latency_counter_get_percentile (latency_counter_t *lc,
-    double percent);
-cdtime_t latency_counter_get_start_time (const latency_counter_t *lc);
-double latency_counter_get_rate (const latency_counter_t *lc,
-    cdtime_t lower, cdtime_t upper, const cdtime_t now);
+cdtime_t latency_counter_get_min(latency_counter_t *lc);
+cdtime_t latency_counter_get_max(latency_counter_t *lc);
+cdtime_t latency_counter_get_sum(latency_counter_t *lc);
+size_t latency_counter_get_num(latency_counter_t *lc);
+cdtime_t latency_counter_get_average(latency_counter_t *lc);
+cdtime_t latency_counter_get_percentile(latency_counter_t *lc, double percent);
+cdtime_t latency_counter_get_start_time(const latency_counter_t *lc);
+double latency_counter_get_rate(const latency_counter_t *lc, cdtime_t lower,
+                                cdtime_t upper, const cdtime_t now);
 
 /* vim: set sw=2 sts=2 et : */

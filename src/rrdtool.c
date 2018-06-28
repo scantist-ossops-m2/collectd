@@ -1054,7 +1054,8 @@ static int rrd_init(void) {
     random_timeout = 0;
     cache_flush_timeout = 0;
   } else if (cache_flush_timeout < cache_timeout) {
-    INFO("rrdtool plugin: \"CacheFlush %.3f\" is less than \"CacheTimeout %.3f\". "
+    INFO("rrdtool plugin: \"CacheFlush %.3f\" is less than \"CacheTimeout "
+         "%.3f\". "
          "Ajusting \"CacheFlush\" to %.3f seconds.",
          CDTIME_T_TO_DOUBLE(cache_flush_timeout),
          CDTIME_T_TO_DOUBLE(cache_timeout),

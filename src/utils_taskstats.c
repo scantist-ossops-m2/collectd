@@ -20,8 +20,8 @@
  *   Florian octo Forster <octo at collectd.org>
  */
 
-#include "collectd.h"
 #include "utils_taskstats.h"
+#include "collectd.h"
 
 #include "common.h"
 #include "plugin.h"
