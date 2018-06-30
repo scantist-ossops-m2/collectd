@@ -189,6 +189,7 @@ static int redis_config_node(oconfig_item_t *ci) /* {{{ */
   rn->port = REDIS_DEF_PORT;
   rn->timeout.tv_sec = REDIS_DEF_TIMEOUT_SEC;
   rn->report_cpu_usage = true;
+  rn->report_command_stats = true;
 
   rn->host = strdup(REDIS_DEF_HOST);
   if (rn->host == NULL) {
