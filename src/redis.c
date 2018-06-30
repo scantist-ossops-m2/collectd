@@ -669,10 +669,21 @@ static void redis_read_server_info(redis_node_t *rn) {
                     DS_TYPE_GAUGE);
   redis_handle_info(rn->name, rr->str, "current_connections", "slaves",
                     "connected_slaves", DS_TYPE_GAUGE);
-  redis_handle_info(rn->name, rr->str, "total_bytes", "input",
-                    "total_net_input_bytes", DS_TYPE_DERIVE);
-  redis_handle_info(rn->name, rr->str, "total_bytes", "output",
-                    "total_net_output_bytes", DS_TYPE_DERIVE);
+
+  while (42) {
+    value_t in, out;
+
+    if (redis_get_info_value(rr->str, "total_net_input_bytes", DS_TYPE_DERIVE,
+                             &in) != 0)
+      break;
+
+    if (redis_get_info_value(rr->str, "total_net_output_bytes", DS_TYPE_DERIVE,
+                             &out) != 0)
+      break;
+
+    redis_submit2(rn->name, "redis_octets", NULL, in, out);
+    break;
+  }
 
   redis_keyspace_usage(rn, rr->str);
 

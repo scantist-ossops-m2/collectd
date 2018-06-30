@@ -28,6 +28,7 @@ clock_reachability      value:GAUGE:0:U
 clock_skew_ppm          value:GAUGE:-2:2
 clock_state             value:GAUGE:0:U
 clock_stratum           value:GAUGE:0:U
+commands                value:DERIVE:0:U
 compression             uncompressed:DERIVE:0:U, compressed:DERIVE:0:U
 compression_ratio       value:GAUGE:0:2
 connections             value:DERIVE:0:U
@@ -197,6 +198,8 @@ ps_vm                   value:GAUGE:0:9223372036854775807
 pubsub                  value:GAUGE:0:U
 queue_length            value:GAUGE:0:U
 records                 value:GAUGE:0:U
+redis_octets            rx:DERIVE:0:U, tx:DERIVE:0:U
+redis_command_cputime   value:DERIVE:0:U
 requests                value:GAUGE:0:U
 response_code           value:GAUGE:0:U
 response_time           value:GAUGE:0:U

@@ -1,0 +1,4 @@
+
+ Inconsistences with upstream:
+
+redis plugin: Report bandwidth usage as `redis_octets`, not `total_bytes`
