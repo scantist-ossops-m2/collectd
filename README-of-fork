@@ -1,4 +1,5 @@
 
  Inconsistences with upstream:
 
-redis plugin: Report bandwidth usage as `redis_octets`, not `total_bytes`
+redis plugin: Report bandwidth usage as `redis_octets`, not `total_bytes`.
+redis plugin: Metric `operations_per_second` not reported in favour of `total_operations`.
