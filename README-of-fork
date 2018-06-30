@@ -4,3 +4,7 @@
 redis plugin: Report bandwidth usage as `redis_octets`, not `total_bytes`.
 redis plugin: Metric `operations_per_second` not reported in favour of `total_operations`.
 redis plugin: `ReportCommandStats true` by default.
+
+ New types added:
+
+redis_octets            rx:DERIVE:0:U, tx:DERIVE:0:U
