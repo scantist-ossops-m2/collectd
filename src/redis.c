@@ -65,6 +65,9 @@ struct prev_s {
 };
 typedef struct prev_s prev_t;
 
+#define true 1
+typedef _Bool bool;
+
 struct redis_node_s;
 typedef struct redis_node_s redis_node_t;
 struct redis_node_s {
