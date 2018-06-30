@@ -280,6 +280,7 @@ redis_submit(const char *plugin_instance, const char *type,
   vl.values = &value;
   vl.values_len = 1;
   sstrncpy(vl.plugin, "redis", sizeof(vl.plugin));
+  sstrncpy(vl.host, hostname_g, sizeof(vl.host));
   if (plugin_instance != NULL)
     sstrncpy(vl.plugin_instance, plugin_instance, sizeof(vl.plugin_instance));
   sstrncpy(vl.type, type, sizeof(vl.type));
@@ -301,6 +302,7 @@ redis_submit2(const char *plugin_instance, const char *type,
   vl.values_len = STATIC_ARRAY_SIZE(values);
 
   sstrncpy(vl.plugin, "redis", sizeof(vl.plugin));
+  sstrncpy(vl.host, hostname_g, sizeof(vl.host));
   sstrncpy(vl.type, type, sizeof(vl.type));
 
   if (plugin_instance != NULL)
