@@ -492,8 +492,8 @@ static int statsd_network_init(struct pollfd **ret_fds, /* {{{ */
     int fd;
     struct pollfd *tmp;
 
-    char dbg_node[NI_MAXHOST];
-    char dbg_service[NI_MAXSERV];
+    char str_node[NI_MAXHOST];
+    char str_service[NI_MAXSERV];
 
     fd = socket(ai_ptr->ai_family, ai_ptr->ai_socktype, ai_ptr->ai_protocol);
     if (fd < 0) {
@@ -503,17 +503,17 @@ static int statsd_network_init(struct pollfd **ret_fds, /* {{{ */
       continue;
     }
 
-    getnameinfo(ai_ptr->ai_addr, ai_ptr->ai_addrlen, dbg_node, sizeof(dbg_node),
-                dbg_service, sizeof(dbg_service),
+    getnameinfo(ai_ptr->ai_addr, ai_ptr->ai_addrlen, str_node, sizeof(str_node),
+                str_service, sizeof(str_service),
                 NI_DGRAM | NI_NUMERICHOST | NI_NUMERICSERV);
-    DEBUG("statsd plugin: Trying to bind to [%s]:%s ...", dbg_node,
-          dbg_service);
+    DEBUG("statsd plugin: Trying to bind to [%s]:%s ...", str_node,
+          str_service);
 
     status = bind(fd, ai_ptr->ai_addr, ai_ptr->ai_addrlen);
     if (status != 0) {
       char errbuf[1024];
-      ERROR("statsd plugin: bind(2) failed: %s",
-            sstrerror(errno, errbuf, sizeof(errbuf)));
+      ERROR("statsd plugin: bind(2) to [%s]:%s failed: %s", str_node,
+            str_service, sstrerror(errno, errbuf, sizeof(errbuf)));
       close(fd);
       continue;
     }
