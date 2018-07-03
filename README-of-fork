@@ -8,3 +8,7 @@ redis plugin: `ReportCommandStats true` by default.
  New types added:
 
 redis_octets            rx:DERIVE:0:U, tx:DERIVE:0:U
+
+TODO:
+
+Check for https://github.com/collectd/collectd/pull/2192/files memleak
