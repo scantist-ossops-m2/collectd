@@ -238,10 +238,6 @@ static int nginx_read(void) {
       } else if ((atoll(fields[0]) != 0) && (atoll(fields[1]) != 0) &&
                  (atoll(fields[2]) != 0)) {
         submit("connections", "accepted", atoll(fields[0]));
-        /* TODO: The legacy metric "handled", which is the sum of "accepted" and
-         * "failed", is reported for backwards compatibility only. Remove in the
-         * next major version. */
-        submit("connections", "handled", atoll(fields[1]));
         submit("connections", "failed", (atoll(fields[0]) - atoll(fields[1])));
         submit("nginx_requests", NULL, atoll(fields[2]));
       }
