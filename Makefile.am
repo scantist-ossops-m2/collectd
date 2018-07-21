@@ -1390,6 +1390,7 @@ pcie_errors_la_LDFLAGS = $(PLUGIN_LDFLAGS)
 test_plugin_pcie_errors_SOURCES = \
 	src/pcie_errors_test.c \
 	src/daemon/utils_llist.c \
+	src/daemon/utils_avltree.c \
 	src/daemon/configfile.c \
 	src/daemon/types_list.c
 test_plugin_pcie_errors_CPPFLAGS = $(AM_CPPFLAGS)
