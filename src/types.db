@@ -217,6 +217,7 @@ pubsub                  value:GAUGE:0:U
 queue_length            value:GAUGE:0:U
 records                 value:GAUGE:0:U
 redis_command_cputime   value:DERIVE:0:U
+redis_octets            rx:DERIVE:0:U, tx:DERIVE:0:U
 requests                value:GAUGE:0:U
 response_code           value:GAUGE:0:U
 response_time           value:GAUGE:0:U
