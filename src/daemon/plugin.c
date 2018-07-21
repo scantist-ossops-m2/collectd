@@ -34,6 +34,7 @@
 #include "configfile.h"
 #include "filter_chain.h"
 #include "plugin.h"
+#include "types_list.h"
 #include "utils_avltree.h"
 #include "utils_cache.h"
 #include "utils_complain.h"
@@ -106,8 +107,6 @@ static llist_t *list_notification;
 
 static fc_chain_t *pre_cache_chain;
 static fc_chain_t *post_cache_chain;
-
-static c_avl_tree_t *data_sets;
 
 static char *plugindir;
 
@@ -1299,36 +1298,8 @@ int plugin_register_shutdown(const char *name, int (*callback)(void)) {
   return create_register_callback(&list_shutdown, name, (void *)callback, NULL);
 } /* int plugin_register_shutdown */
 
-static void plugin_free_data_sets(void) {
-  void *key;
-  void *value;
-
-  if (data_sets == NULL)
-    return;
-
-  while (c_avl_pick(data_sets, &key, &value) == 0) {
-    data_set_t *ds = value;
-    /* key is a pointer to ds->type */
-
-    sfree(ds->ds);
-    sfree(ds);
-  }
-
-  c_avl_destroy(data_sets);
-  data_sets = NULL;
-} /* void plugin_free_data_sets */
-
 int plugin_register_data_set(const data_set_t *ds) {
   data_set_t *ds_copy;
-
-  if ((data_sets != NULL) && (c_avl_get(data_sets, ds->type, NULL) == 0)) {
-    NOTICE("Replacing DS `%s' with another version.", ds->type);
-    plugin_unregister_data_set(ds->type);
-  } else if (data_sets == NULL) {
-    data_sets = c_avl_create((int (*)(const void *, const void *))strcmp);
-    if (data_sets == NULL)
-      return -1;
-  }
 
   ds_copy = malloc(sizeof(*ds_copy));
   if (ds_copy == NULL)
@@ -1344,7 +1315,7 @@ int plugin_register_data_set(const data_set_t *ds) {
   for (size_t i = 0; i < ds->ds_num; i++)
     memcpy(ds_copy->ds + i, ds->ds + i, sizeof(data_source_t));
 
-  return c_avl_insert(data_sets, (void *)ds_copy->type, (void *)ds_copy);
+  return merge_dataset(ds_copy);
 } /* int plugin_register_data_set */
 
 int plugin_register_log(const char *name, plugin_log_cb callback,
@@ -1501,18 +1472,10 @@ int plugin_unregister_shutdown(const char *name) {
 }
 
 int plugin_unregister_data_set(const char *name) {
-  data_set_t *ds;
-
-  if (data_sets == NULL)
-    return -1;
-
-  if (c_avl_remove(data_sets, name, NULL, (void *)&ds) != 0)
-    return -1;
-
-  sfree(ds->ds);
-  sfree(ds);
-
-  return 0;
+  ERROR("plugin_unregister_data_set: Dataset unregistering is unsafe and "
+        "obsolete. Command ignored. Dataset: `%s'.",
+        name);
+  return -1;
 } /* int plugin_unregister_data_set */
 
 int plugin_unregister_log(const char *name) {
@@ -1686,7 +1649,7 @@ int plugin_write(const char *plugin, /* {{{ */
     return ENOENT;
 
   if (ds == NULL) {
-    ds = plugin_get_ds(vl->type);
+    ds = get_dataset(vl->type);
     if (ds == NULL) {
       ERROR("plugin_write: Unable to lookup type `%s'.", vl->type);
       return ENOENT;
@@ -1846,7 +1809,6 @@ int plugin_shutdown_all(void) {
   destroy_all_callbacks(&list_log);
 
   plugin_free_loaded();
-  plugin_free_data_sets();
   return ret;
 } /* void plugin_shutdown_all */
 
@@ -1911,15 +1873,8 @@ static int plugin_dispatch_values_internal(value_list_t *vl) {
                     "registered. Please load at least one output plugin, "
                     "if you want the collected data to be stored.");
 
-  if (data_sets == NULL) {
-    ERROR("plugin_dispatch_values: No data sets registered. "
-          "Could the types database be read? Check "
-          "your `TypesDB' setting!");
-    return -1;
-  }
-
-  data_set_t *ds = NULL;
-  if (c_avl_get(data_sets, vl->type, (void *)&ds) != 0) {
+  data_set_t const *ds = get_dataset(vl->type);
+  if (ds == NULL) {
     char ident[6 * DATA_MAX_NAME_LEN];
 
     FORMAT_VL(ident, sizeof(ident), vl);
@@ -2280,19 +2235,7 @@ int parse_notif_severity(const char *severity) {
 } /* int parse_notif_severity */
 
 const data_set_t *plugin_get_ds(const char *name) {
-  data_set_t *ds;
-
-  if (data_sets == NULL) {
-    P_ERROR("plugin_get_ds: No data sets are defined yet.");
-    return NULL;
-  }
-
-  if (c_avl_get(data_sets, name, (void *)&ds) != 0) {
-    DEBUG("No such dataset registered: %s", name);
-    return NULL;
-  }
-
-  return ds;
+  return get_dataset(name);
 } /* data_set_t *plugin_get_ds */
 
 static int plugin_notification_meta_add(notification_t *n, const char *name,
