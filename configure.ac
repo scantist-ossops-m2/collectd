@@ -99,6 +99,10 @@ case $host_os in
     AC_DEFINE([KERNEL_SOLARIS], [1], [True if program is to be compiled for a Solaris kernel])
     ac_system="Solaris"
     ;;
+  *mingw32*)
+    AC_DEFINE([KERNEL_WIN32], [1], [True if program is to be compiled for a Windows kernel])
+    ac_system="Windows"
+    ;;
   *)
     ac_system="unknown"
     ;;
@@ -111,6 +115,7 @@ AM_CONDITIONAL([BUILD_FREEBSD], [test "x$ac_system" = "xFreeBSD"])
 AM_CONDITIONAL([BUILD_LINUX], [test "x$ac_system" = "xLinux"])
 AM_CONDITIONAL([BUILD_OPENBSD], [test "x$ac_system" = "xOpenBSD"])
 AM_CONDITIONAL([BUILD_SOLARIS], [test "x$ac_system" = "xSolaris"])
+AM_CONDITIONAL([BUILD_WIN32], [test "x$ac_system" = "xWindows"])
 
 if test "x$ac_system" = "xSolaris"; then
   AC_DEFINE([_POSIX_PTHREAD_SEMANTICS], [1], [Define to enforce POSIX thread semantics under Solaris.])
@@ -751,6 +756,7 @@ AC_CHECK_FUNCS_ONCE([ \
     getaddrinfo \
     getgrnam_r \
     getnameinfo \
+    getpwnam \
     getpwnam_r \
     gettimeofday \
     if_indextoname \
@@ -773,8 +779,12 @@ AC_FUNC_STRERROR_R
 
 SAVE_CFLAGS="$CFLAGS"
 CFLAGS="-Wall -Werror"
-SAVE_LDFAGS="$LDFLAGS"
+SAVE_LDFLAGS="$LDFLAGS"
 LDFLAGS=""
+if test "x$ac_system" = "xWindows"; then
+  # This is exported from build.sh
+  LDFLAGS="$LDFLAGS -L${GNULIB_DIR}"
+fi
 
 AC_CACHE_CHECK([for strtok_r],
   [c_cv_have_strtok_r_default],
@@ -857,11 +867,17 @@ AC_CHECK_FUNCS([socket],
   [
     AC_CHECK_LIB([socket], [socket],
       [socket_needs_socket="yes"],
-      [AC_MSG_ERROR([cannot find socket() in libsocket])]
+      [
+        AC_CHECK_LIB([gnu], [rpl_socket],
+          [socket_needs_gnulib="yes"],
+          [AC_MSG_ERROR([cannot find socket() in libsocket])]
+        )
+      ]
     )
   ]
 )
 AM_CONDITIONAL([BUILD_WITH_LIBSOCKET], [test "x$socket_needs_socket" = "xyes"])
+AM_CONDITIONAL([BUILD_WITH_GNULIB], [test "x$socket_needs_gnulib" = "xyes"])
 
 clock_gettime_needs_posix4="no"
 AC_CHECK_FUNCS([clock_gettime],
@@ -5904,19 +5920,12 @@ AC_SUBST([BUILD_WITH_LIBVARNISH_CFLAGS])
 AC_SUBST([BUILD_WITH_LIBVARNISH_LIBS])
 # }}}
 
-# pkg-config --exists 'libxml-2.0'; pkg-config --exists libvirt {{{
+# pkg-config --exists 'libxml-2.0' {{{
 $PKG_CONFIG --exists 'libxml-2.0' 2>/dev/null
 if test $? -eq 0; then
   with_libxml2="yes"
 else
   with_libxml2="no (pkg-config doesn't know libxml-2.0)"
-fi
-
-$PKG_CONFIG --exists libvirt 2>/dev/null
-if test $? = 0; then
-  with_libvirt="yes"
-else
-  with_libvirt="no (pkg-config doesn't know libvirt)"
 fi
 
 if test "x$with_libxml2" = "xyes"; then
@@ -5962,6 +5971,15 @@ fi
 
 AC_SUBST([BUILD_WITH_LIBXML2_CFLAGS])
 AC_SUBST([BUILD_WITH_LIBXML2_LIBS])
+# }}}
+
+# pkg-config --exists libvirt {{{
+$PKG_CONFIG --exists libvirt 2>/dev/null
+if test $? = 0; then
+  with_libvirt="yes"
+else
+  with_libvirt="no (pkg-config doesn't know libvirt)"
+fi
 
 if test "x$with_libvirt" = "xyes"; then
   with_libvirt_cflags="`$PKG_CONFIG --cflags libvirt`"
@@ -7251,3 +7269,4 @@ if test "x$dependency_warning" = "xyes"; then
 fi
 
 # vim: set fdm=marker sw=2 sts=2 ts=2 et :
+
