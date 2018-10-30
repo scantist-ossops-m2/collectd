@@ -198,6 +198,7 @@ typedef struct process_entry_s {
   derive_t io_syscw;
   derive_t io_diskr;
   derive_t io_diskw;
+  derive_t io_disk_cancelled;
   bool has_io;
 
   derive_t cswitch_vol;
@@ -231,6 +232,7 @@ typedef struct procstat_entry_s {
   derive_t io_syscw;
   derive_t io_diskr;
   derive_t io_diskw;
+  derive_t io_disk_cancelled;
 
   derive_t cswitch_vol;
   derive_t cswitch_invol;
@@ -274,6 +276,7 @@ typedef struct procstat {
   derive_t io_syscw;
   derive_t io_diskr;
   derive_t io_diskw;
+  derive_t io_disk_cancelled;
 
   derive_t cswitch_vol;
   derive_t cswitch_invol;
@@ -358,6 +361,7 @@ static procstat_t *ps_list_register(const char *name, const char *regexp) {
   new->io_syscw = -1;
   new->io_diskr = -1;
   new->io_diskw = -1;
+  new->io_disk_cancelled = -1;
   new->cswitch_vol = -1;
   new->cswitch_invol = -1;
 
@@ -567,6 +571,9 @@ static void ps_list_add(const char *name, const char *cmdline,
     if ((entry->io_diskr != -1) && (entry->io_diskw != -1)) {
       ps_update_counter(&ps->io_diskr, &pse->io_diskr, entry->io_diskr);
       ps_update_counter(&ps->io_diskw, &pse->io_diskw, entry->io_diskw);
+    }
+    if (entry->io_disk_cancelled != -1) {
+      ps_update_counter(&ps->io_disk_cancelled, &pse->io_disk_cancelled, entry->io_disk_cancelled);
     }
 
     if ((entry->cswitch_vol != -1) && (entry->cswitch_invol != -1)) {
@@ -874,6 +881,12 @@ static void ps_submit_proc_list(procstat_t *ps) {
     vl.values_len = 2;
     plugin_dispatch_values(&vl);
   }
+  if (ps->io_disk_cancelled != -1) {
+    sstrncpy(vl.type, "ps_disk_cancelled", sizeof(vl.type));
+    vl.values[0].derive = ps->io_disk_cancelled;
+    vl.values_len = 1;
+    plugin_dispatch_values(&vl);
+  }
 
   if (ps->num_fd > 0) {
     sstrncpy(vl.type, "file_handles", sizeof(vl.type));
@@ -1131,6 +1144,8 @@ static int ps_read_io(process_entry_t *ps) {
       val = &(ps->io_diskr);
     else if (strncasecmp(buffer, "write_bytes:", 12) == 0)
       val = &(ps->io_diskw);
+    else if (strncasecmp(buffer, "cancelled_write_bytes:", 22) == 0)
+      val = &(ps->io_disk_cancelled);
     else
       continue;
 
@@ -1420,6 +1435,7 @@ static int ps_read_process(long pid, process_entry_t *ps, char *state) {
   ps->io_syscw = -1;
   ps->io_diskr = -1;
   ps->io_diskw = -1;
+  ps->io_disk_cancelled = -1;
 
   ps->cswitch_vol = -1;
   ps->cswitch_invol = -1;
@@ -1678,6 +1694,7 @@ static int ps_read_process(long pid, process_entry_t *ps, char *state) {
   ps->io_syscw = myUsage->pr_sysc;
   ps->io_diskr = -1;
   ps->io_diskw = -1;
+  ps->io_disk_cancelled = -1;
 
   /*
    * TODO: context switch counters for Solaris
@@ -1892,6 +1909,7 @@ static int ps_read(void) {
         pse.io_syscw = -1;
         pse.io_diskr = -1;
         pse.io_diskw = -1;
+        pse.io_disk_cancelled = -1;
 
         /* File descriptor count not implemented */
         pse.num_fd = 0;
@@ -2199,6 +2217,7 @@ static int ps_read(void) {
       pse.io_syscw = -1;
       pse.io_diskr = -1;
       pse.io_diskw = -1;
+      pse.io_disk_cancelled = -1;
 
       /* file descriptor count not implemented */
       pse.num_fd = 0;
@@ -2343,6 +2362,7 @@ static int ps_read(void) {
       pse.io_syscw = -1;
       pse.io_diskr = -1;
       pse.io_diskw = -1;
+      pse.io_disk_cancelled = -1;
 
       /* file descriptor count not implemented */
       pse.num_fd = 0;
@@ -2511,6 +2531,7 @@ static int ps_read(void) {
       pse.io_syscw = -1;
       pse.io_diskr = -1;
       pse.io_diskw = -1;
+      pse.io_disk_cancelled = -1;
 
       pse.num_fd = 0;
       pse.num_maps = 0;
