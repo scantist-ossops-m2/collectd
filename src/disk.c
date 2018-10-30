@@ -663,7 +663,6 @@ static int disk_read(void) {
 
   char *fields[32];
   int numfields;
-  int fieldshift = 0;
 
   int minor = 0;
 
@@ -684,14 +683,8 @@ static int disk_read(void) {
   diskstats_t *ds, *pre_ds;
 
   if ((fh = fopen("/proc/diskstats", "r")) == NULL) {
-    fh = fopen("/proc/partitions", "r");
-    if (fh == NULL) {
-      ERROR("disk plugin: fopen (/proc/{diskstats,partitions}) failed.");
-      return -1;
-    }
-
-    /* Kernel is 2.4.* */
-    fieldshift = 1;
+    ERROR("disk plugin: fopen(\"/proc/diskstats\"): %s", STRERRNO);
+    return -1;
   }
 
   while (fgets(buffer, sizeof(buffer), fh) != NULL) {
@@ -700,12 +693,13 @@ static int disk_read(void) {
 
     numfields = strsplit(buffer, fields, 32);
 
-    if ((numfields != (14 + fieldshift)) && (numfields != 7))
+    /* need either 7 fields (partition) or at least 14 fields */
+    if ((numfields != 7) && (numfields < 14))
       continue;
 
     minor = atoll(fields[1]);
 
-    disk_name = fields[2 + fieldshift];
+    disk_name = fields[2];
 
     for (ds = disklist, pre_ds = disklist; ds != NULL;
          pre_ds = ds, ds = ds->next)
@@ -734,28 +728,26 @@ static int disk_read(void) {
       read_sectors = atoll(fields[4]);
       write_ops = atoll(fields[5]);
       write_sectors = atoll(fields[6]);
-    } else if (numfields == (14 + fieldshift)) {
-      read_ops = atoll(fields[3 + fieldshift]);
-      write_ops = atoll(fields[7 + fieldshift]);
-
-      read_sectors = atoll(fields[5 + fieldshift]);
-      write_sectors = atoll(fields[9 + fieldshift]);
-
-      if ((fieldshift == 0) || (minor == 0)) {
-        is_disk = 1;
-        read_merged = atoll(fields[4 + fieldshift]);
-        read_time = atoll(fields[6 + fieldshift]);
-        write_merged = atoll(fields[8 + fieldshift]);
-        write_time = atoll(fields[10 + fieldshift]);
-
-        in_progress = atof(fields[11 + fieldshift]);
-
-        io_time = atof(fields[12 + fieldshift]);
-        weighted_time = atof(fields[13 + fieldshift]);
-      }
     } else {
-      DEBUG("numfields = %i; => unknown file format.", numfields);
-      continue;
+      assert(numfields >= 14);
+      read_ops = atoll(fields[3]);
+      write_ops = atoll(fields[7]);
+
+      read_sectors = atoll(fields[5]);
+      write_sectors = atoll(fields[9]);
+
+      if (minor == 0) {
+        is_disk = 1;
+        read_merged = atoll(fields[4]);
+        read_time = atoll(fields[6]);
+        write_merged = atoll(fields[8]);
+        write_time = atoll(fields[10]);
+
+        in_progress = atof(fields[11]);
+
+        io_time = atof(fields[12]);
+        weighted_time = atof(fields[13]);
+      }
     }
 
     {
