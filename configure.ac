@@ -3523,10 +3523,12 @@ fi
 if test "x$with_libmongoc" = "xyes"; then
   BUILD_WITH_LIBMONGOC_CFLAGS="$LIBMONGOC_CFLAGS"
   BUILD_WITH_LIBMONGOC_LDFLAGS="$LIBMONGOC_LDFLAGS"
+  BUILD_WITH_LIBMONGOC_LIBS="$LIBMONGOC_LIBS"
 fi
 
 AC_SUBST([BUILD_WITH_LIBMONGOC_CFLAGS])
 AC_SUBST([BUILD_WITH_LIBMONGOC_LDFLAGS])
+AC_SUBST([BUILD_WITH_LIBMONGOC_LIBS])
 # }}}
 
 # --with-libmosquitto {{{
@@ -5265,6 +5267,27 @@ if test "x$with_libsensors" = "xyes"; then
   )
 
   LDFLAGS="$SAVE_LDFLAGS"
+fi
+
+if test "x$with_libsensors" = "xyes"; then
+  SAVE_CPPFLAGS="$CPPFLAGS"
+  CPPFLAGS="$CPPFLAGS $with_sensors_cppflags"
+  AC_PREPROC_IFELSE(
+    [
+      AC_LANG_SOURCE(
+        [[
+          #include <sensors/sensors.h>
+          #if SENSORS_API_VERSION < 0x400
+          #error "required libsensors version >= 3.0"
+          #endif
+        ]]
+      )
+    ],
+    [with_libsensors="yes"],
+    [with_libsensors="no (sensors library version 3.0.0 or higher is required)"]
+  )
+
+  CPPFLAGS="$SAVE_CPPFLAGS"
 fi
 
 if test "x$with_libsensors" = "xyes"; then
