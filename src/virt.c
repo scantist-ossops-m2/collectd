@@ -1118,16 +1118,26 @@ static void domain_state_submit_notif(virDomainPtr dom, int state, int reason) {
   submit_notif(dom, severity, msg, "domain_state", NULL);
 }
 
-static int lv_config(const char *key, const char *value) {
-  if (virInitialize() != 0)
-    return 1;
-
+static int lv_init_ignorelists() {
   if (il_domains == NULL)
     il_domains = ignorelist_create(1);
   if (il_block_devices == NULL)
     il_block_devices = ignorelist_create(1);
   if (il_interface_devices == NULL)
     il_interface_devices = ignorelist_create(1);
+
+  if (!il_domains || !il_block_devices || !il_interface_devices)
+    return 1;
+
+  return 0;
+}
+
+static int lv_config(const char *key, const char *value) {
+  if (virInitialize() != 0)
+    return 1;
+
+  if (lv_init_ignorelists() != 0)
+    return 1;
 
   if (strcasecmp(key, "Connection") == 0) {
     char *tmp = strdup(value);
@@ -2267,6 +2277,10 @@ static int lv_init(void) {
   if (virInitialize() != 0)
     return -1;
 
+  /* Init ignorelists if there was no explicit configuration */
+  if (lv_init_ignorelists() != 0)
+    return -1;
+
   /* event implementation must be registered before connection is opened */
   if (!persistent_notification)
     if (register_event_impl() != 0)
@@ -2386,6 +2400,94 @@ static int lv_instance_include_domain(struct lv_read_instance *inst,
   return 0;
 }
 
+static void lv_add_block_devices(struct lv_read_state *state, virDomainPtr dom,
+                                 const char *domname,
+                                 xmlXPathContextPtr xpath_ctx) {
+  const char *bd_xmlpath = "/domain/devices/disk/target[@dev]";
+  if (blockdevice_format == source)
+    bd_xmlpath = "/domain/devices/disk/source[@dev]";
+
+  xmlXPathObjectPtr xpath_obj =
+      xmlXPathEval((const xmlChar *)bd_xmlpath, xpath_ctx);
+
+  if (xpath_obj == NULL)
+    return;
+
+  if (xpath_obj->type != XPATH_NODESET || xpath_obj->nodesetval == NULL) {
+    xmlXPathFreeObject(xpath_obj);
+    return;
+  }
+
+  for (int j = 0; j < xpath_obj->nodesetval->nodeNr; ++j) {
+    xmlNodePtr node = xpath_obj->nodesetval->nodeTab[j];
+    if (!node)
+      continue;
+
+    char *path = (char *)xmlGetProp(node, (xmlChar *)"dev");
+    if (!path)
+      continue;
+
+    if (ignore_device_match(il_block_devices, domname, path) == 0)
+      add_block_device(state, dom, path);
+
+    xmlFree(path);
+  }
+  xmlXPathFreeObject(xpath_obj);
+}
+
+static void lv_add_network_interfaces(struct lv_read_state *state,
+                                      virDomainPtr dom, const char *domname,
+                                      xmlXPathContextPtr xpath_ctx) {
+  xmlXPathObjectPtr xpath_obj = xmlXPathEval(
+      (xmlChar *)"/domain/devices/interface[target[@dev]]", xpath_ctx);
+
+  if (xpath_obj == NULL)
+    return;
+
+  if (xpath_obj->type != XPATH_NODESET || xpath_obj->nodesetval == NULL) {
+    xmlXPathFreeObject(xpath_obj);
+    return;
+  }
+
+  xmlNodeSetPtr xml_interfaces = xpath_obj->nodesetval;
+
+  for (int j = 0; j < xml_interfaces->nodeNr; ++j) {
+    char *path = NULL;
+    char *address = NULL;
+
+    xmlNodePtr xml_interface = xml_interfaces->nodeTab[j];
+    if (!xml_interface)
+      continue;
+
+    for (xmlNodePtr child = xml_interface->children; child;
+         child = child->next) {
+      if (child->type != XML_ELEMENT_NODE)
+        continue;
+
+      if (xmlStrEqual(child->name, (const xmlChar *)"target")) {
+        path = (char *)xmlGetProp(child, (const xmlChar *)"dev");
+        if (!path)
+          continue;
+      } else if (xmlStrEqual(child->name, (const xmlChar *)"mac")) {
+        address = (char *)xmlGetProp(child, (const xmlChar *)"address");
+        if (!address)
+          continue;
+      }
+    }
+
+    if ((ignore_device_match(il_interface_devices, domname, path) == 0 &&
+         ignore_device_match(il_interface_devices, domname, address) == 0)) {
+      add_interface_device(state, dom, path, address, j + 1);
+    }
+
+    if (path)
+      xmlFree(path);
+    if (address)
+      xmlFree(address);
+  }
+  xmlXPathFreeObject(xpath_obj);
+}
+
 static int refresh_lists(struct lv_read_instance *inst) {
   struct lv_read_state *state = &inst->read_state;
   int n;
@@ -2411,10 +2513,8 @@ static int refresh_lists(struct lv_read_instance *inst) {
                                    VIR_CONNECT_LIST_DOMAINS_INACTIVE);
   n = virConnectListAllDomains(conn, &domains, VIR_CONNECT_LIST_DOMAINS_ACTIVE);
 #else
-  int *domids;
-
   /* Get list of domains. */
-  domids = calloc(n, sizeof(*domids));
+  int *domids = calloc(n, sizeof(*domids));
   if (domids == NULL) {
     ERROR(PLUGIN_NAME " plugin: calloc failed.");
     return -1;
@@ -2447,20 +2547,11 @@ static int refresh_lists(struct lv_read_instance *inst) {
 
   /* Fetch each domain and add it to the list, unless ignore. */
   for (int i = 0; i < n; ++i) {
-    const char *name;
-    char *xml = NULL;
-    xmlDocPtr xml_doc = NULL;
-    xmlXPathContextPtr xpath_ctx = NULL;
-    xmlXPathObjectPtr xpath_obj = NULL;
-    char tag[PARTITION_TAG_MAX_LEN] = {'\0'};
-    virDomainInfo info;
-    int status;
 
 #ifdef HAVE_LIST_ALL_DOMAINS
     virDomainPtr dom = domains[i];
 #else
-    virDomainPtr dom = NULL;
-    dom = virDomainLookupByID(conn, domids[i]);
+    virDomainPtr dom = virDomainLookupByID(conn, domids[i]);
     if (dom == NULL) {
       VIRT_ERROR(conn, "virDomainLookupByID");
       /* Could be that the domain went away -- ignore it anyway. */
@@ -2479,16 +2570,17 @@ static int refresh_lists(struct lv_read_instance *inst) {
        */
       ERROR(PLUGIN_NAME " plugin: malloc failed.");
       virDomainFree(dom);
-      goto cont;
+      continue;
     }
 
-    name = virDomainGetName(dom);
-    if (name == NULL) {
+    const char *domname = virDomainGetName(dom);
+    if (domname == NULL) {
       VIRT_ERROR(conn, "virDomainGetName");
-      goto cont;
+      continue;
     }
 
-    status = virDomainGetInfo(dom, &info);
+    virDomainInfo info;
+    int status = virDomainGetInfo(dom, &info);
     if (status != 0) {
       ERROR(PLUGIN_NAME " plugin: virDomainGetInfo failed with status %i.",
             status);
@@ -2496,15 +2588,18 @@ static int refresh_lists(struct lv_read_instance *inst) {
     }
 
     if (info.state != VIR_DOMAIN_RUNNING) {
-      DEBUG(PLUGIN_NAME " plugin: skipping inactive domain %s", name);
+      DEBUG(PLUGIN_NAME " plugin: skipping inactive domain %s", domname);
       continue;
     }
 
-    if (il_domains && ignorelist_match(il_domains, name) != 0)
-      goto cont;
+    if (ignorelist_match(il_domains, domname) != 0)
+      continue;
 
     /* Get a list of devices for this domain. */
-    xml = virDomainGetXMLDesc(dom, 0);
+    xmlDocPtr xml_doc = NULL;
+    xmlXPathContextPtr xpath_ctx = NULL;
+
+    char *xml = virDomainGetXMLDesc(dom, 0);
     if (!xml) {
       VIRT_ERROR(conn, "virDomainGetXMLDesc");
       goto cont;
@@ -2519,96 +2614,22 @@ static int refresh_lists(struct lv_read_instance *inst) {
 
     xpath_ctx = xmlXPathNewContext(xml_doc);
 
-    if (lv_domain_get_tag(xpath_ctx, name, tag) < 0) {
+    char tag[PARTITION_TAG_MAX_LEN] = {'\0'};
+    if (lv_domain_get_tag(xpath_ctx, domname, tag) < 0) {
       ERROR(PLUGIN_NAME " plugin: lv_domain_get_tag failed.");
       goto cont;
     }
 
-    if (!lv_instance_include_domain(inst, name, tag))
+    if (!lv_instance_include_domain(inst, domname, tag))
       goto cont;
 
     /* Block devices. */
-    const char *bd_xmlpath = "/domain/devices/disk/target[@dev]";
-    if (blockdevice_format == source)
-      bd_xmlpath = "/domain/devices/disk/source[@dev]";
-    xpath_obj = xmlXPathEval((const xmlChar *)bd_xmlpath, xpath_ctx);
-
-    if (xpath_obj == NULL || xpath_obj->type != XPATH_NODESET ||
-        xpath_obj->nodesetval == NULL)
-      goto cont;
-
-    for (int j = 0; j < xpath_obj->nodesetval->nodeNr; ++j) {
-      xmlNodePtr node;
-      char *path = NULL;
-
-      node = xpath_obj->nodesetval->nodeTab[j];
-      if (!node)
-        continue;
-      path = (char *)xmlGetProp(node, (xmlChar *)"dev");
-      if (!path)
-        continue;
-
-      if (il_block_devices &&
-          ignore_device_match(il_block_devices, name, path) != 0)
-        goto cont2;
-
-      add_block_device(state, dom, path);
-    cont2:
-      if (path)
-        xmlFree(path);
-    }
-    xmlXPathFreeObject(xpath_obj);
+    lv_add_block_devices(state, dom, domname, xpath_ctx);
 
     /* Network interfaces. */
-    xpath_obj = xmlXPathEval(
-        (xmlChar *)"/domain/devices/interface[target[@dev]]", xpath_ctx);
-    if (xpath_obj == NULL || xpath_obj->type != XPATH_NODESET ||
-        xpath_obj->nodesetval == NULL)
-      goto cont;
-
-    xmlNodeSetPtr xml_interfaces = xpath_obj->nodesetval;
-
-    for (int j = 0; j < xml_interfaces->nodeNr; ++j) {
-      char *path = NULL;
-      char *address = NULL;
-      xmlNodePtr xml_interface;
-
-      xml_interface = xml_interfaces->nodeTab[j];
-      if (!xml_interface)
-        continue;
-
-      for (xmlNodePtr child = xml_interface->children; child;
-           child = child->next) {
-        if (child->type != XML_ELEMENT_NODE)
-          continue;
-
-        if (xmlStrEqual(child->name, (const xmlChar *)"target")) {
-          path = (char *)xmlGetProp(child, (const xmlChar *)"dev");
-          if (!path)
-            continue;
-        } else if (xmlStrEqual(child->name, (const xmlChar *)"mac")) {
-          address = (char *)xmlGetProp(child, (const xmlChar *)"address");
-          if (!address)
-            continue;
-        }
-      }
-
-      if (il_interface_devices &&
-          (ignore_device_match(il_interface_devices, name, path) != 0 ||
-           ignore_device_match(il_interface_devices, name, address) != 0))
-        goto cont3;
-
-      add_interface_device(state, dom, path, address, j + 1);
-    cont3:
-      if (path)
-        xmlFree(path);
-      if (address)
-        xmlFree(address);
-    }
+    lv_add_network_interfaces(state, dom, domname, xpath_ctx);
 
   cont:
-    if (xpath_obj)
-      xmlXPathFreeObject(xpath_obj);
     if (xpath_ctx)
       xmlXPathFreeContext(xpath_ctx);
     if (xml_doc)
@@ -2756,20 +2777,17 @@ static int add_interface_device(struct lv_read_state *state, virDomainPtr dom,
 
 static int ignore_device_match(ignorelist_t *il, const char *domname,
                                const char *devpath) {
-  char *name;
-  int r;
-
   if ((domname == NULL) || (devpath == NULL))
     return 0;
 
   size_t n = strlen(domname) + strlen(devpath) + 2;
-  name = malloc(n);
+  char *name = malloc(n);
   if (name == NULL) {
     ERROR(PLUGIN_NAME " plugin: malloc failed.");
     return 0;
   }
   snprintf(name, n, "%s:%s", domname, devpath);
-  r = ignorelist_match(il, name);
+  int r = ignorelist_match(il, name);
   sfree(name);
   return r;
 }
