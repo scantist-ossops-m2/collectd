@@ -1689,6 +1689,8 @@
 #	Connection "xen:///"
 #	RefreshInterval 60
 #	Domain "name"
+#	ReportBlockDevices true
+#	ReportNetworkInterfaces true
 #	BlockDevice "name:device"
 #	BlockDeviceFormat target
 #	BlockDeviceFormatBasename false
