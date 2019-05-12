@@ -26,12 +26,12 @@
 
 #include "collectd.h"
 
-#include "common.h"
+#include "utils/common/common.h"
 
 #include "configfile.h"
 #include "plugin.h"
 #include "types_list.h"
-#include "utils_avltree.h"
+#include "utils/avltree/avltree.h"
 
 static c_avl_tree_t *data_sets = NULL;
 
@@ -70,8 +70,11 @@ void free_datasets() {
 int merge_dataset(data_set_t *ds) {
   data_set_t *current = NULL;
 
-  if (data_sets == NULL)
+  if (data_sets == NULL) {
+    sfree(ds->ds);
+    sfree(ds);
     return -1;
+  }
 
   c_avl_get(data_sets, ds->type, (void *)&current);
 
@@ -83,7 +86,6 @@ int merge_dataset(data_set_t *ds) {
       NOTICE("New version of DS `%s' has different datasources number. "
              "Dataset not updated.",
              ds->type);
-
       sfree(ds->ds);
       sfree(ds);
       return -1;
@@ -105,7 +107,7 @@ int merge_dataset(data_set_t *ds) {
     if (match == 1) {
       sfree(ds->ds);
       sfree(ds);
-      return (0);
+      return 0;
     }
 
     NOTICE("Updating DS `%s' with another version.", ds->type);
@@ -128,7 +130,7 @@ int merge_dataset(data_set_t *ds) {
     ERROR("merge_dataset: c_avl_insert() failed.");
     sfree(ds->ds);
     sfree(ds);
-    return (-1);
+    return -1;
   }
 
   return 0;
@@ -198,8 +200,6 @@ static int parse_ds(data_source_t *dsrc, char *buf, size_t buf_len) {
 static void parse_line(char *buf) {
   char *fields[64];
   size_t fields_num;
-  data_set_t *ds;
-
   fields_num = strsplit(buf, fields, 64);
   if (fields_num < 2)
     return;
@@ -208,7 +208,7 @@ static void parse_line(char *buf) {
   if (fields[0][0] == '#')
     return;
 
-  ds = calloc(1, sizeof(*ds));
+  data_set_t *ds = calloc(1, sizeof(*ds));
   if (ds == NULL)
     return;
 

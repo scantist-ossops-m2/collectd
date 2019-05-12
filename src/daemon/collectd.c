@@ -28,10 +28,10 @@
 #include "cmd.h"
 #include "collectd.h"
 
-#include "common.h"
 #include "configfile.h"
 #include "plugin.h"
 #include "types_list.h"
+#include "utils/common/common.h"
 
 #include <netdb.h>
 #include <sys/types.h>
@@ -358,8 +358,7 @@ static int configure_collectd(struct cmdline_config *config) {
    * Also, this will automatically load modules.
    */
   if (cf_read(config->configfile)) {
-    fprintf(stderr, "Error: Reading the config file failed!\n"
-                    "Read the logs for details.\n");
+    fprintf(stderr, "Error: Parsing the config file failed!\n");
     return 1;
   }
 

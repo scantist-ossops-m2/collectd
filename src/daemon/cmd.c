@@ -25,7 +25,7 @@
 #include "collectd.h"
 #include "types_list.h"
 
-#include "common.h"
+#include "utils/common/common.h"
 #include <sys/un.h>
 
 static void *do_flush(void __attribute__((unused)) * arg) {
