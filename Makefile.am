@@ -1526,7 +1526,7 @@ pcie_errors_la_LDFLAGS = $(PLUGIN_LDFLAGS)
 test_plugin_pcie_errors_SOURCES = \
 	src/pcie_errors_test.c \
 	src/daemon/utils_llist.c \
-	src/daemon/utils_avltree.c \
+	src/utils/avltree/avltree.c \
 	src/daemon/configfile.c \
 	src/daemon/types_list.c
 test_plugin_pcie_errors_CPPFLAGS = $(AM_CPPFLAGS)
@@ -1961,7 +1961,7 @@ virt_la_LDFLAGS = $(PLUGIN_LDFLAGS)
 virt_la_LIBADD = libignorelist.la $(BUILD_WITH_LIBVIRT_LIBS) $(BUILD_WITH_LIBXML2_LIBS)
 
 test_plugin_virt_SOURCES = src/virt_test.c src/daemon/configfile.c \
-	src/daemon/types_list.c
+	src/utils/avltree/avltree.c src/daemon/types_list.c
 test_plugin_virt_CPPFLAGS = $(AM_CPPFLAGS) \
 	$(BUILD_WITH_LIBVIRT_CPPFLAGS) $(BUILD_WITH_LIBXML2_CFLAGS)
 test_plugin_virt_LDFLAGS = $(PLUGIN_LDFLAGS) \
