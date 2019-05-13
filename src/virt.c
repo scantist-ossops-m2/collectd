@@ -2297,8 +2297,11 @@ static int lv_read(user_data_t *ud) {
       return -1;
 
   /* Wait until inst#0 establish connection */
-  if (conn == NULL)
+  if (conn == NULL) {
+    DEBUG(PLUGIN_NAME " plugin#%s: Wait until inst#0 establish connection",
+          inst->tag);
     return 0;
+  }
 
   time_t t;
   time(&t);
@@ -2422,7 +2425,8 @@ static int lv_init(void) {
     return -1;
 
   if (!persistent_notification)
-    virt_notif_thread_init(&notif_thread);
+    if (virt_notif_thread_init(&notif_thread) != 0)
+      return -1;
 
   lv_connect();
 
