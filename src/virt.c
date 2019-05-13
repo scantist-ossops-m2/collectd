@@ -2087,11 +2087,11 @@ static int get_if_dev_stats(struct interface_device *if_dev) {
     submit_derive2("if_packets", (derive_t)stats.rx_packets,
                    (derive_t)stats.tx_packets, if_dev->dom, display_name);
 
-  if ((stats.rx_errs > 0) && (stats.tx_errs > 0))
+  if ((stats.rx_errs > 0) || (stats.tx_errs > 0))
     submit_derive2("if_errors", (derive_t)stats.rx_errs,
                    (derive_t)stats.tx_errs, if_dev->dom, display_name);
 
-  if ((stats.rx_drop > 0) && (stats.tx_drop > 0))
+  if ((stats.rx_drop > 0) || (stats.tx_drop > 0))
     submit_derive2("if_dropped", (derive_t)stats.rx_drop,
                    (derive_t)stats.tx_drop, if_dev->dom, display_name);
   return 0;
