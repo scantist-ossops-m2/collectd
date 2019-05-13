@@ -69,9 +69,10 @@
 #endif
 
 /*
-  virConnectListAllDomains() appeared in 0.10.2
-  Note that LIBVIR_CHECK_VERSION appeared a year later, so
-  in some systems which actually have virConnectListAllDomains()
+  virConnectListAllDomains() appeared in 0.10.2 (Sep 2012)
+  Note that LIBVIR_CHECK_VERSION appeared a year later (Dec 2013,
+  libvirt-1.2.0),
+  so in some systems which actually have virConnectListAllDomains()
   we can't detect this.
  */
 #if LIBVIR_CHECK_VERSION(0, 10, 2)
@@ -1734,9 +1735,9 @@ static int get_memory_stats(virDomainPtr domain) {
       swap_in = minfo[i].val;
     else if (minfo[i].tag == VIR_DOMAIN_MEMORY_STAT_SWAP_OUT)
       swap_out = minfo[i].val;
-    else if (minfo[i].tag == VIR_DOMAIN_MEMORY_STAT_MAJOR_FAULT)
-      min_flt = minfo[i].val;
     else if (minfo[i].tag == VIR_DOMAIN_MEMORY_STAT_MINOR_FAULT)
+      min_flt = minfo[i].val;
+    else if (minfo[i].tag == VIR_DOMAIN_MEMORY_STAT_MAJOR_FAULT)
       maj_flt = minfo[i].val;
 #ifdef LIBVIR_CHECK_VERSION
 #if LIBVIR_CHECK_VERSION(2, 1, 0)
@@ -1754,7 +1755,7 @@ static int get_memory_stats(virDomainPtr domain) {
     submit(domain, "swap_io", "out", &(value_t){.gauge = swap_out}, 1);
   }
 
-  if (min_flt > -1 || maj_flt > -1) {
+  if (min_flt > 0 || maj_flt > 0) {
     value_t values[] = {
         {.gauge = (gauge_t)min_flt}, {.gauge = (gauge_t)maj_flt},
     };
