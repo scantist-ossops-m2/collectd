@@ -1468,6 +1468,7 @@ static int ps_read_process(long pid, process_entry_t *ps, char *state) {
   return 0;
 } /* int ps_read_process (...) */
 
+#if 0
 static int procs_running(void) {
   char buffer[4096] = {};
   char id[] = "procs_running "; /* white space terminated */
@@ -1502,6 +1503,7 @@ static int procs_running(void) {
 
   return -1;
 }
+#endif
 
 static char *ps_get_cmdline(long pid, char *name, char *buf, size_t buf_len) {
   char *buf_ptr;
@@ -2160,6 +2162,7 @@ static int ps_read(void) {
 
   closedir(proc);
 
+#if 0
   /* get procs_running from /proc/stat
    * scanning /proc/stat AND computing other process stats takes too much time.
    * Consequently, the number of running processes based on the occurences
@@ -2169,6 +2172,7 @@ static int ps_read(void) {
    * The 'procs_running' number in /proc/stat on the other hand is more
    * accurate, and can be retrieved in a single 'read' call. */
   running = procs_running();
+#endif
 
   ps_submit_state("running", running);
   ps_submit_state("sleeping", sleeping);
