@@ -369,6 +369,7 @@ test_utils_message_parser_SOURCES = \
 	src/utils_tail_match.c src/utils_tail_match.h \
 	src/utils/tail/tail.c src/utils/tail/tail.h \
 	src/utils/match/match.c src/utils/match/match.h \
+	src/utils/avltree/avltree.c src/utils/avltree/avltree.h \
 	src/utils/latency/latency.c src/utils/latency/latency.h \
 	src/utils/latency/latency_config.c src/utils/latency/latency_config.h
 test_utils_message_parser_CPPFLAGS = $(AM_CPPFLAGS)
@@ -1285,6 +1286,7 @@ test_plugin_logparser_SOURCES = src/logparser_test.c \
        src/utils_tail_match.c src/utils_tail_match.h \
        src/utils/tail/tail.c src/utils/tail/tail.h \
        src/utils/match/match.c src/utils/match/match.h \
+       src/utils/avltree/avltree.c src/utils/avltree/avltree.h \
        src/daemon/configfile.c \
        src/daemon/types_list.c
 test_plugin_logparser_CPPFLAGS = $(AM_CPPFLAGS)
