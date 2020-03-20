@@ -7881,6 +7881,10 @@ of the form "I<Protocol>:I<ValueName>", where I<Protocol> will be used as the
 plugin instance and I<ValueName> will be used as type instance. An example of
 the string being used would be C<Tcp:RetransSegs>.
 
+This not applied to metrics which are reported as types other than
+"protocol_counter". Look into "/proc/net/snmp" and "/proc/net/netstat" files
+to find their appropriate I<Selector>.
+
 You can use regular expressions to match a large number of values with just one
 configuration option. To select all "extended" I<TCP> values, you could use the
 following statement:
@@ -7897,6 +7901,11 @@ See F</"IGNORELISTS"> for details.
 
 If set to B<true>, inverts the selection made by B<Value>, i.E<nbsp>e. all
 matching values will be ignored.
+
+=item B<ReportEmptyMetrics> B<true>|B<false>
+
+When set to B<true>, allows reporting of metrics which source value is zero.
+Defaults to B<false>.
 
 =back
 
