@@ -1044,17 +1044,17 @@ int parse_identifier_vl(const char *str, value_list_t *vl) /* {{{ */
 } /* }}} int parse_identifier_vl */
 
 int parse_value(const char *value_orig, value_t *ret_value, int ds_type) {
-  char *value;
   char *endptr = NULL;
-  size_t value_len;
 
   if (value_orig == NULL)
     return EINVAL;
 
-  value = strdup(value_orig);
-  if (value == NULL)
+  char *value = strdup(value_orig);
+  if (value == NULL) {
+    P_ERROR("parse_value: strdup() failed.");
     return ENOMEM;
-  value_len = strlen(value);
+  }
+  size_t value_len = strlen(value);
 
   while ((value_len > 0) && isspace((int)value[value_len - 1])) {
     value[value_len - 1] = '\0';
