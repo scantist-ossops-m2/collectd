@@ -140,6 +140,7 @@ noinst_LTLIBRARIES = \
 	liblookup.la \
 	libmetadata.la \
 	libmount.la \
+	libnvme.la \
 	liboconfig.la
 
 
@@ -439,6 +440,10 @@ test_format_graphite_LDADD = \
 	libmetadata.la \
 	libplugin_mock.la \
 	-lm
+
+libnvme_la_SOURCES = \
+	src/nvme/nvme-ioctl.h \
+	src/nvme/nvme-ioctl.c
 
 libformat_json_la_SOURCES = \
 	src/utils/format_json/format_json.c \
@@ -2304,7 +2309,7 @@ pkglib_LTLIBRARIES += nvme.la
 nvme_la_SOURCES = src/nvme.c
 nvme_la_CPPFLAGS = $(AM_CPPFLAGS)
 nvme_la_LDFLAGS = $(PLUGIN_LDFLAGS)
-#nvme_la_LIBADD = -lxenctrl
+nvme_la_LIBADD = libnvme.la
 endif
 
 if BUILD_PLUGIN_XMMS

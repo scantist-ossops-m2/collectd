@@ -16,6 +16,8 @@
 #define _LINUX_NVME_H
 
 #include <linux/types.h>
+#include <stdbool.h>
+#include <inttypes.h>
 
 #ifdef LIBUUID
 #include <uuid/uuid.h>
