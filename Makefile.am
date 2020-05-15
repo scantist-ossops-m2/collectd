@@ -2299,6 +2299,14 @@ xencpu_la_LDFLAGS = $(PLUGIN_LDFLAGS) $(LIBXENCTL_LDFLAGS)
 xencpu_la_LIBADD = -lxenctrl
 endif
 
+if BUILD_PLUGIN_NVME
+pkglib_LTLIBRARIES += nvme.la
+nvme_la_SOURCES = src/nvme.c
+nvme_la_CPPFLAGS = $(AM_CPPFLAGS)
+nvme_la_LDFLAGS = $(PLUGIN_LDFLAGS)
+#nvme_la_LIBADD = -lxenctrl
+endif
+
 if BUILD_PLUGIN_XMMS
 pkglib_LTLIBRARIES += xmms.la
 xmms_la_SOURCES = src/xmms.c

@@ -6605,6 +6605,7 @@ plugin_memory="no"
 plugin_multimeter="no"
 plugin_nfs="no"
 plugin_numa="no"
+plugin_nvme="no"
 plugin_ovs_events="no"
 plugin_ovs_stats="no"
 plugin_pcie_errors="no"
@@ -6661,6 +6662,7 @@ if test "x$ac_system" = "xLinux"; then
   plugin_memory="yes"
   plugin_nfs="yes"
   plugin_numa="yes"
+  plugin_nvme="yes"
   plugin_processes="yes"
   plugin_protocols="yes"
   plugin_serial="yes"
@@ -7095,6 +7097,7 @@ AC_PLUGIN([notify_nagios],       [yes],                       [Nagios notificati
 AC_PLUGIN([ntpd],                [yes],                       [NTPd statistics])
 AC_PLUGIN([numa],                [$plugin_numa],              [NUMA virtual memory statistics])
 AC_PLUGIN([nut],                 [$with_libupsclient],        [Network UPS tools statistics])
+AC_PLUGIN([nvme],                [$plugin_nvme],              [NVMe plugin])
 AC_PLUGIN([olsrd],               [yes],                       [olsrd statistics])
 AC_PLUGIN([onewire],             [$with_libowcapi],           [OneWire sensor statistics])
 AC_PLUGIN([openldap],            [$with_libldap],             [OpenLDAP statistics])
@@ -7540,6 +7543,7 @@ AC_MSG_RESULT([    notify_nagios . . . . $enable_notify_nagios])
 AC_MSG_RESULT([    ntpd  . . . . . . . . $enable_ntpd])
 AC_MSG_RESULT([    numa  . . . . . . . . $enable_numa])
 AC_MSG_RESULT([    nut . . . . . . . . . $enable_nut])
+AC_MSG_RESULT([    nvme  . . . . . . . . $enable_nvme])
 AC_MSG_RESULT([    olsrd . . . . . . . . $enable_olsrd])
 AC_MSG_RESULT([    onewire . . . . . . . $enable_onewire])
 AC_MSG_RESULT([    openldap  . . . . . . $enable_openldap])
