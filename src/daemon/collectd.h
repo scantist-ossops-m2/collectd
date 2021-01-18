@@ -31,6 +31,7 @@
 #include "config.h"
 #endif
 
+#include <stdbool.h>
 #include <stdio.h>
 #if HAVE_SYS_TYPES_H
 #include <sys/types.h>
