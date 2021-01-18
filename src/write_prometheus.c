@@ -36,8 +36,12 @@
 
 #include <microhttpd.h>
 
+#include <netdb.h>
+#include <sys/socket.h>
+#include <sys/types.h>
+
 #ifndef PROMETHEUS_DEFAULT_STALENESS_DELTA
-#define PROMETHEUS_DEFAULT_STALENESS_DELTA TIME_T_TO_CDTIME_T(300)
+#define PROMETHEUS_DEFAULT_STALENESS_DELTA TIME_T_TO_CDTIME_T_STATIC(300)
 #endif
 
 #define VARINT_UINT32_BYTES 5
@@ -47,15 +51,22 @@
   "encoding=delimited"
 #define CONTENT_TYPE_TEXT "text/plain; version=0.0.4"
 
+#if MHD_VERSION >= 0x00097002
+#define MHD_RESULT enum MHD_Result
+#else
+#define MHD_RESULT int
+#endif
+
 static c_avl_tree_t *metrics;
 static pthread_mutex_t metrics_lock = PTHREAD_MUTEX_INITIALIZER;
 
+static char *httpd_host = NULL;
 static unsigned short httpd_port = 9103;
 static struct MHD_Daemon *httpd;
 
 static cdtime_t staleness_delta = PROMETHEUS_DEFAULT_STALENESS_DELTA;
 
-/* Unfortunately, protoc-c doesn't export it's implementation of varint, so we
+/* Unfortunately, protoc-c doesn't export its implementation of varint, so we
  * need to implement our own. */
 static size_t varint(uint8_t buffer[static VARINT_UINT32_BYTES],
                      uint32_t value) {
@@ -98,6 +109,43 @@ static void format_protobuf(ProtobufCBuffer *buffer) {
   pthread_mutex_unlock(&metrics_lock);
 }
 
+static char const *escape_label_value(char *buffer, size_t buffer_size,
+                                      char const *value) {
+  /* shortcut for values that don't need escaping. */
+  if (strpbrk(value, "\n\"\\") == NULL)
+    return value;
+
+  size_t value_len = strlen(value);
+  size_t buffer_len = 0;
+
+  for (size_t i = 0; i < value_len; i++) {
+    switch (value[i]) {
+    case '\n':
+    case '"':
+    case '\\':
+      if ((buffer_size - buffer_len) < 3) {
+        break;
+      }
+      buffer[buffer_len] = '\\';
+      buffer[buffer_len + 1] = (value[i] == '\n') ? 'n' : value[i];
+      buffer_len += 2;
+      break;
+
+    default:
+      if ((buffer_size - buffer_len) < 2) {
+        break;
+      }
+      buffer[buffer_len] = value[i];
+      buffer_len++;
+      break;
+    }
+  }
+
+  assert(buffer_len < buffer_size);
+  buffer[buffer_len] = 0;
+  return buffer;
+}
+
 /* format_labels formats a metric's labels in Prometheus-compatible format. This
  * format looks like this:
  *
@@ -109,16 +157,23 @@ static char *format_labels(char *buffer, size_t buffer_size,
   assert(m->n_label >= 1);
   assert(m->n_label <= 3);
 
-#define LABEL_BUFFER_SIZE (2 * DATA_MAX_NAME_LEN + 4)
+#define LABEL_KEY_SIZE DATA_MAX_NAME_LEN
+#define LABEL_VALUE_SIZE (2 * DATA_MAX_NAME_LEN - 1)
+#define LABEL_BUFFER_SIZE (LABEL_KEY_SIZE + LABEL_VALUE_SIZE + 4)
 
   char *labels[3] = {
-      (char[LABEL_BUFFER_SIZE]){0}, (char[LABEL_BUFFER_SIZE]){0},
+      (char[LABEL_BUFFER_SIZE]){0},
+      (char[LABEL_BUFFER_SIZE]){0},
       (char[LABEL_BUFFER_SIZE]){0},
   };
 
-  for (size_t i = 0; i < m->n_label; i++)
+  /* N.B.: the label *names* are hard-coded by this plugin and therefore we
+   * know that they are sane. */
+  for (size_t i = 0; i < m->n_label; i++) {
+    char value[LABEL_VALUE_SIZE];
     ssnprintf(labels[i], LABEL_BUFFER_SIZE, "%s=\"%s\"", m->label[i]->name,
-              m->label[i]->value);
+              escape_label_value(value, sizeof(value), m->label[i]->value));
+  }
 
   strjoin(buffer, buffer_size, labels, m->n_label, ",");
   return buffer;
@@ -178,10 +233,11 @@ static void format_text(ProtobufCBuffer *buffer) {
 
 /* http_handler is the callback called by the microhttpd library. It essentially
  * handles all HTTP request aspects and creates an HTTP response. */
-static int http_handler(void *cls, struct MHD_Connection *connection,
-                        const char *url, const char *method,
-                        const char *version, const char *upload_data,
-                        size_t *upload_data_size, void **connection_state) {
+static MHD_RESULT http_handler(void *cls, struct MHD_Connection *connection,
+                               const char *url, const char *method,
+                               const char *version, const char *upload_data,
+                               size_t *upload_data_size,
+                               void **connection_state) {
   if (strcmp(method, MHD_HTTP_METHOD_GET) != 0) {
     return MHD_NO;
   }
@@ -197,9 +253,8 @@ static int http_handler(void *cls, struct MHD_Connection *connection,
 
   char const *accept = MHD_lookup_connection_value(connection, MHD_HEADER_KIND,
                                                    MHD_HTTP_HEADER_ACCEPT);
-  _Bool want_proto =
-      (accept != NULL) &&
-      (strstr(accept, "application/vnd.google.protobuf") != NULL);
+  bool want_proto = (accept != NULL) &&
+                    (strstr(accept, "application/vnd.google.protobuf") != NULL);
 
   uint8_t scratch[4096] = {0};
   ProtobufCBufferSimple simple = PROTOBUF_C_BUFFER_SIMPLE_INIT(scratch);
@@ -210,12 +265,17 @@ static int http_handler(void *cls, struct MHD_Connection *connection,
   else
     format_text(buffer);
 
+#if defined(MHD_VERSION) && MHD_VERSION >= 0x00090500
+  struct MHD_Response *res = MHD_create_response_from_buffer(
+      simple.len, simple.data, MHD_RESPMEM_MUST_COPY);
+#else
   struct MHD_Response *res = MHD_create_response_from_data(
       simple.len, simple.data, /* must_free = */ 0, /* must_copy = */ 1);
+#endif
   MHD_add_response_header(res, MHD_HTTP_HEADER_CONTENT_TYPE,
                           want_proto ? CONTENT_TYPE_PROTO : CONTENT_TYPE_TEXT);
 
-  int status = MHD_queue_response(connection, MHD_HTTP_OK, res);
+  MHD_RESULT status = MHD_queue_response(connection, MHD_HTTP_OK, res);
 
   MHD_destroy_response(res);
   PROTOBUF_C_BUFFER_SIMPLE_CLEAR(&simple);
@@ -249,22 +309,22 @@ static void label_pair_destroy(Io__Prometheus__Client__LabelPair *msg) {
   sfree(msg);
 }
 
-/* label_pair_create allocates and initializes a new label pair. */
-static Io__Prometheus__Client__LabelPair *label_pair_create(char const *name,
-                                                            char const *value) {
-  Io__Prometheus__Client__LabelPair *msg = calloc(1, sizeof(*msg));
-  if (msg == NULL)
+/* label_pair_clone allocates and initializes a new label pair. */
+static Io__Prometheus__Client__LabelPair *
+label_pair_clone(Io__Prometheus__Client__LabelPair const *orig) {
+  Io__Prometheus__Client__LabelPair *copy = calloc(1, sizeof(*copy));
+  if (copy == NULL)
     return NULL;
-  io__prometheus__client__label_pair__init(msg);
+  io__prometheus__client__label_pair__init(copy);
 
-  msg->name = strdup(name);
-  msg->value = strdup(value);
-  if ((msg->name == NULL) || (msg->value == NULL)) {
-    label_pair_destroy(msg);
+  copy->name = strdup(orig->name);
+  copy->value = strdup(orig->value);
+  if ((copy->name == NULL) || (copy->value == NULL)) {
+    label_pair_destroy(copy);
     return NULL;
   }
 
-  return msg;
+  return copy;
 }
 
 /* metric_destroy frees the memory used by a metric. */
@@ -283,47 +343,6 @@ static void metric_destroy(Io__Prometheus__Client__Metric *msg) {
   sfree(msg);
 }
 
-/* metric_add_labels adds the labels that identify this metric to m.
- * The logic is copied from the "collectd_exporter". Essentially, the labels
- * contain the hostname, the plugin instance and the type instance of a
- * value_list_t. */
-static int metric_add_labels(Io__Prometheus__Client__Metric *m,
-                             value_list_t const *vl) {
-  size_t n_label = 1;
-  if (strlen(vl->plugin_instance) != 0)
-    n_label++;
-  if (strlen(vl->type_instance) != 0)
-    n_label++;
-
-  m->label = calloc(n_label, sizeof(*m->label));
-  if (m->label == NULL)
-    return ENOMEM;
-
-  if (strlen(vl->plugin_instance) != 0) {
-    m->label[m->n_label] = label_pair_create(vl->plugin, vl->plugin_instance);
-    m->n_label++;
-  }
-
-  if (strlen(vl->type_instance) != 0) {
-    char const *name = "type";
-    if (strlen(vl->plugin_instance) == 0)
-      name = vl->plugin;
-
-    m->label[m->n_label] = label_pair_create(name, vl->type_instance);
-    m->n_label++;
-  }
-
-  m->label[m->n_label] = label_pair_create("instance", vl->host);
-  m->n_label++;
-
-  for (size_t i = 0; i < m->n_label; i++) {
-    if (m->label[i] == NULL)
-      return ENOMEM;
-  }
-
-  return 0;
-}
-
 /* metric_cmp compares two metrics. It's prototype makes it easy to use with
  * qsort(3) and bsearch(3). */
 static int metric_cmp(void const *a, void const *b) {
@@ -338,35 +357,104 @@ static int metric_cmp(void const *a, void const *b) {
     return 1;
 
   /* Prometheus does not care about the order of labels. All labels in this
-   * plugin are created by metric_add_labels(), though, and therefore always
+   * plugin are created by METRIC_ADD_LABELS(), though, and therefore always
    * appear in the same order. We take advantage of this and simplify the check
-   * by making sure all labels are the same in each position. */
+   * by making sure all labels are the same in each position.
+   *
+   * We also only need to check the label values, because the label names are
+   * the same for all metrics in a metric family.
+   *
+   * 3 labels:
+   * [0] $plugin="$plugin_instance" => $plugin is the same within a family
+   * [1] type="$type_instance"      => "type" is a static string
+   * [2] instance="$host"           => "instance" is a static string
+   *
+   * 2 labels, variant 1:
+   * [0] $plugin="$plugin_instance" => $plugin is the same within a family
+   * [1] instance="$host"           => "instance" is a static string
+   *
+   * 2 labels, variant 2:
+   * [0] $plugin="$type_instance"   => $plugin is the same within a family
+   * [1] instance="$host"           => "instance" is a static string
+   *
+   * 1 label:
+   * [1] instance="$host"           => "instance" is a static string
+   */
   for (size_t i = 0; i < m_a->n_label; i++) {
-    int status = strcmp(m_a->label[i]->name, m_b->label[i]->name);
+    int status = strcmp(m_a->label[i]->value, m_b->label[i]->value);
     if (status != 0)
       return status;
 
-    status = strcmp(m_a->label[i]->value, m_b->label[i]->value);
-    if (status != 0)
-      return status;
+#if COLLECT_DEBUG
+    assert(strcmp(m_a->label[i]->name, m_b->label[i]->name) == 0);
+#endif
   }
 
   return 0;
 }
 
-/* metric_create allocates and initializes a new metric. */
-static Io__Prometheus__Client__Metric *metric_create(value_list_t const *vl) {
-  Io__Prometheus__Client__Metric *msg = calloc(1, sizeof(*msg));
-  if (msg == NULL)
-    return NULL;
-  io__prometheus__client__metric__init(msg);
+#define METRIC_INIT                                                            \
+  &(Io__Prometheus__Client__Metric) {                                          \
+    .label =                                                                   \
+        (Io__Prometheus__Client__LabelPair *[]){                               \
+            &(Io__Prometheus__Client__LabelPair){                              \
+                .name = NULL,                                                  \
+            },                                                                 \
+            &(Io__Prometheus__Client__LabelPair){                              \
+                .name = NULL,                                                  \
+            },                                                                 \
+            &(Io__Prometheus__Client__LabelPair){                              \
+                .name = NULL,                                                  \
+            },                                                                 \
+        },                                                                     \
+    .n_label = 0,                                                              \
+  }
 
-  if (metric_add_labels(msg, vl) != 0) {
-    metric_destroy(msg);
+#define METRIC_ADD_LABELS(m, vl)                                               \
+  do {                                                                         \
+    if (strlen((vl)->plugin_instance) != 0) {                                  \
+      (m)->label[(m)->n_label]->name = (char *)(vl)->plugin;                   \
+      (m)->label[(m)->n_label]->value = (char *)(vl)->plugin_instance;         \
+      (m)->n_label++;                                                          \
+    }                                                                          \
+                                                                               \
+    if (strlen((vl)->type_instance) != 0) {                                    \
+      (m)->label[(m)->n_label]->name = "type";                                 \
+      if (strlen((vl)->plugin_instance) == 0)                                  \
+        (m)->label[(m)->n_label]->name = (char *)(vl)->plugin;                 \
+      (m)->label[(m)->n_label]->value = (char *)(vl)->type_instance;           \
+      (m)->n_label++;                                                          \
+    }                                                                          \
+                                                                               \
+    (m)->label[(m)->n_label]->name = "instance";                               \
+    (m)->label[(m)->n_label]->value = (char *)(vl)->host;                      \
+    (m)->n_label++;                                                            \
+  } while (0)
+
+/* metric_clone allocates and initializes a new metric based on orig. */
+static Io__Prometheus__Client__Metric *
+metric_clone(Io__Prometheus__Client__Metric const *orig) {
+  Io__Prometheus__Client__Metric *copy = calloc(1, sizeof(*copy));
+  if (copy == NULL)
+    return NULL;
+  io__prometheus__client__metric__init(copy);
+
+  copy->n_label = orig->n_label;
+  copy->label = calloc(copy->n_label, sizeof(*copy->label));
+  if (copy->label == NULL) {
+    sfree(copy);
     return NULL;
   }
 
-  return msg;
+  for (size_t i = 0; i < copy->n_label; i++) {
+    copy->label[i] = label_pair_clone(orig->label[i]);
+    if (copy->label[i] == NULL) {
+      metric_destroy(copy);
+      return NULL;
+    }
+  }
+
+  return copy;
 }
 
 /* metric_update stores the new value and timestamp in m. */
@@ -452,9 +540,8 @@ static int metric_family_add_metric(Io__Prometheus__Client__MetricFamily *fam,
 static int
 metric_family_delete_metric(Io__Prometheus__Client__MetricFamily *fam,
                             value_list_t const *vl) {
-  Io__Prometheus__Client__Metric *key = metric_create(vl);
-  if (key == NULL)
-    return ENOMEM;
+  Io__Prometheus__Client__Metric *key = METRIC_INIT;
+  METRIC_ADD_LABELS(key, vl);
 
   size_t i;
   for (i = 0; i < fam->n_metric; i++) {
@@ -471,9 +558,14 @@ metric_family_delete_metric(Io__Prometheus__Client__MetricFamily *fam,
             ((fam->n_metric - 1) - i) * sizeof(fam->metric[i]));
   fam->n_metric--;
 
+  if (fam->n_metric == 0) {
+    sfree(fam->metric);
+    return 0;
+  }
+
   Io__Prometheus__Client__Metric **tmp =
       realloc(fam->metric, fam->n_metric * sizeof(*fam->metric));
-  if ((tmp != NULL) || (fam->n_metric == 0))
+  if (tmp != NULL)
     fam->metric = tmp;
 
   return 0;
@@ -484,9 +576,8 @@ metric_family_delete_metric(Io__Prometheus__Client__MetricFamily *fam,
 static Io__Prometheus__Client__Metric *
 metric_family_get_metric(Io__Prometheus__Client__MetricFamily *fam,
                          value_list_t const *vl) {
-  Io__Prometheus__Client__Metric *key = metric_create(vl);
-  if (key == NULL)
-    return NULL;
+  Io__Prometheus__Client__Metric *key = METRIC_INIT;
+  METRIC_ADD_LABELS(key, vl);
 
   /* Metrics are sorted in metric_family_add_metric() so that we can do a binary
    * search here. */
@@ -494,18 +585,21 @@ metric_family_get_metric(Io__Prometheus__Client__MetricFamily *fam,
       &key, fam->metric, fam->n_metric, sizeof(*fam->metric), metric_cmp);
 
   if (m != NULL) {
-    metric_destroy(key);
     return *m;
   }
 
+  Io__Prometheus__Client__Metric *new_metric = metric_clone(key);
+  if (new_metric == NULL)
+    return NULL;
+
   DEBUG("write_prometheus plugin: created new metric in family");
-  int status = metric_family_add_metric(fam, key);
+  int status = metric_family_add_metric(fam, new_metric);
   if (status != 0) {
-    metric_destroy(key);
+    metric_destroy(new_metric);
     return NULL;
   }
 
-  return key;
+  return new_metric;
 }
 
 /* metric_family_update looks up the matching metric in a metric family,
@@ -602,8 +696,8 @@ static char *metric_family_name(data_set_t const *ds, value_list_t const *vl,
 /* metric_family_get looks up the matching metric family, allocating it if
  * necessary. */
 static Io__Prometheus__Client__MetricFamily *
-metric_family_get(data_set_t const *ds, value_list_t const *vl,
-                  size_t ds_index) {
+metric_family_get(data_set_t const *ds, value_list_t const *vl, size_t ds_index,
+                  bool allocate) {
   char *name = metric_family_name(ds, vl, ds_index);
   if (name == NULL) {
     ERROR("write_prometheus plugin: Allocating metric family name failed.");
@@ -615,6 +709,11 @@ metric_family_get(data_set_t const *ds, value_list_t const *vl,
     sfree(name);
     assert(fam != NULL);
     return fam;
+  }
+
+  if (!allocate) {
+    sfree(name);
+    return NULL;
   }
 
   fam = metric_family_create(name, ds, vl, ds_index);
@@ -631,7 +730,7 @@ metric_family_get(data_set_t const *ds, value_list_t const *vl,
 
   int status = c_avl_insert(metrics, fam->name, fam);
   if (status != 0) {
-    ERROR("write_prometheus plugin: Adding \"%s\" failed.", name);
+    ERROR("write_prometheus plugin: Adding \"%s\" failed.", fam->name);
     metric_family_destroy(fam);
     return NULL;
   }
@@ -640,6 +739,129 @@ metric_family_get(data_set_t const *ds, value_list_t const *vl,
 }
 /* }}} */
 
+static void prom_logger(__attribute__((unused)) void *arg, char const *fmt,
+                        va_list ap) {
+  /* {{{ */
+  char errbuf[1024];
+  vsnprintf(errbuf, sizeof(errbuf), fmt, ap);
+
+  ERROR("write_prometheus plugin: %s", errbuf);
+} /* }}} prom_logger */
+
+#if MHD_VERSION >= 0x00090000
+static int prom_open_socket(int addrfamily) {
+  /* {{{ */
+  char service[NI_MAXSERV];
+  ssnprintf(service, sizeof(service), "%hu", httpd_port);
+
+  struct addrinfo *res;
+  int status = getaddrinfo(httpd_host, service,
+                           &(struct addrinfo){
+                               .ai_flags = AI_PASSIVE | AI_ADDRCONFIG,
+                               .ai_family = addrfamily,
+                               .ai_socktype = SOCK_STREAM,
+                           },
+                           &res);
+  if (status != 0) {
+    return -1;
+  }
+
+  int fd = -1;
+  for (struct addrinfo *ai = res; ai != NULL; ai = ai->ai_next) {
+    int flags = ai->ai_socktype;
+#ifdef SOCK_CLOEXEC
+    flags |= SOCK_CLOEXEC;
+#endif
+
+    fd = socket(ai->ai_family, flags, 0);
+    if (fd == -1)
+      continue;
+
+    if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &(int){1}, sizeof(int)) != 0) {
+      WARNING("write_prometheus plugin: setsockopt(SO_REUSEADDR) failed: %s",
+              STRERRNO);
+      close(fd);
+      fd = -1;
+      continue;
+    }
+
+    if (bind(fd, ai->ai_addr, ai->ai_addrlen) != 0) {
+      close(fd);
+      fd = -1;
+      continue;
+    }
+
+    if (listen(fd, /* backlog = */ 16) != 0) {
+      close(fd);
+      fd = -1;
+      continue;
+    }
+
+    char str_node[NI_MAXHOST];
+    char str_service[NI_MAXSERV];
+
+    getnameinfo(ai->ai_addr, ai->ai_addrlen, str_node, sizeof(str_node),
+                str_service, sizeof(str_service),
+                NI_NUMERICHOST | NI_NUMERICSERV);
+
+    INFO("write_prometheus plugin: Listening on [%s]:%s.", str_node,
+         str_service);
+    break;
+  }
+
+  freeaddrinfo(res);
+
+  return fd;
+} /* }}} int prom_open_socket */
+
+static struct MHD_Daemon *prom_start_daemon() {
+  /* {{{ */
+  int fd = prom_open_socket(PF_INET6);
+  if (fd == -1)
+    fd = prom_open_socket(PF_INET);
+  if (fd == -1) {
+    ERROR("write_prometheus plugin: Opening a listening socket for [%s]:%hu "
+          "failed.",
+          (httpd_host != NULL) ? httpd_host : "::", httpd_port);
+    return NULL;
+  }
+
+  unsigned int flags = MHD_USE_THREAD_PER_CONNECTION | MHD_USE_DEBUG;
+#if MHD_VERSION >= 0x00095300
+  flags |= MHD_USE_INTERNAL_POLLING_THREAD;
+#endif
+
+  struct MHD_Daemon *d = MHD_start_daemon(
+      flags, httpd_port,
+      /* MHD_AcceptPolicyCallback = */ NULL,
+      /* MHD_AcceptPolicyCallback arg = */ NULL, http_handler, NULL,
+      MHD_OPTION_LISTEN_SOCKET, fd, MHD_OPTION_EXTERNAL_LOGGER, prom_logger,
+      NULL, MHD_OPTION_END);
+  if (d == NULL) {
+    ERROR("write_prometheus plugin: MHD_start_daemon() failed.");
+    close(fd);
+    return NULL;
+  }
+
+  return d;
+} /* }}} struct MHD_Daemon *prom_start_daemon */
+#else /* if MHD_VERSION < 0x00090000 */
+static struct MHD_Daemon *prom_start_daemon() {
+  /* {{{ */
+  struct MHD_Daemon *d = MHD_start_daemon(
+      MHD_USE_THREAD_PER_CONNECTION | MHD_USE_DEBUG, httpd_port,
+      /* MHD_AcceptPolicyCallback = */ NULL,
+      /* MHD_AcceptPolicyCallback arg = */ NULL, http_handler, NULL,
+      MHD_OPTION_EXTERNAL_LOGGER, prom_logger, NULL, MHD_OPTION_END);
+  if (d == NULL) {
+    ERROR("write_prometheus plugin: MHD_start_daemon() failed.");
+    return NULL;
+  }
+
+  return d;
+} /* }}} struct MHD_Daemon *prom_start_daemon */
+#endif
+
 /*
  * collectd callbacks
  */
@@ -647,7 +869,15 @@ static int prom_config(oconfig_item_t *ci) {
   for (int i = 0; i < ci->children_num; i++) {
     oconfig_item_t *child = ci->children + i;
 
-    if (strcasecmp("Port", child->key) == 0) {
+    if (strcasecmp("Host", child->key) == 0) {
+#if MHD_VERSION >= 0x00090000
+      cf_util_get_string(child, &httpd_host);
+#else
+      ERROR("write_prometheus plugin: Option `Host' not supported. Please "
+            "upgrade libmicrohttpd to at least 0.9.0");
+      return -1;
+#endif
+    } else if (strcasecmp("Port", child->key) == 0) {
       int status = cf_util_get_port_number(child);
       if (status > 0)
         httpd_port = (unsigned short)status;
@@ -673,17 +903,8 @@ static int prom_init() {
   }
 
   if (httpd == NULL) {
-    unsigned int flags = MHD_USE_THREAD_PER_CONNECTION;
-#if MHD_VERSION >= 0x00093300
-    flags |= MHD_USE_DUAL_STACK;
-#endif
-
-    httpd = MHD_start_daemon(flags, httpd_port,
-                             /* MHD_AcceptPolicyCallback = */ NULL,
-                             /* MHD_AcceptPolicyCallback arg = */ NULL,
-                             http_handler, NULL, MHD_OPTION_END);
+    httpd = prom_start_daemon();
     if (httpd == NULL) {
-      ERROR("write_prometheus plugin: MHD_start_daemon() failed.");
       return -1;
     }
     DEBUG("write_prometheus plugin: Successfully started microhttpd %s",
@@ -698,7 +919,8 @@ static int prom_write(data_set_t const *ds, value_list_t const *vl,
   pthread_mutex_lock(&metrics_lock);
 
   for (size_t i = 0; i < ds->ds_num; i++) {
-    Io__Prometheus__Client__MetricFamily *fam = metric_family_get(ds, vl, i);
+    Io__Prometheus__Client__MetricFamily *fam =
+        metric_family_get(ds, vl, i, /* allocate = */ true);
     if (fam == NULL)
       continue;
 
@@ -724,7 +946,8 @@ static int prom_missing(value_list_t const *vl,
   pthread_mutex_lock(&metrics_lock);
 
   for (size_t i = 0; i < ds->ds_num; i++) {
-    Io__Prometheus__Client__MetricFamily *fam = metric_family_get(ds, vl, i);
+    Io__Prometheus__Client__MetricFamily *fam =
+        metric_family_get(ds, vl, i, /* allocate = */ false);
     if (fam == NULL)
       continue;
 
@@ -733,6 +956,7 @@ static int prom_missing(value_list_t const *vl,
       ERROR("write_prometheus plugin: Deleting a metric in family \"%s\" "
             "failed with status %d",
             fam->name, status);
+
       continue;
     }
 
@@ -773,6 +997,8 @@ static int prom_shutdown() {
   }
   pthread_mutex_unlock(&metrics_lock);
 
+  sfree(httpd_host);
+
   return 0;
 }
 
@@ -785,5 +1011,3 @@ void module_register() {
                           /* user data = */ NULL);
   plugin_register_shutdown("write_prometheus", prom_shutdown);
 }
-
-/* vim: set sw=2 sts=2 et fdm=marker : */
