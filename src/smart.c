@@ -122,6 +122,7 @@ static int create_ignorelist_by_serial(ignorelist_t *il) {
   }
   enumerate = udev_enumerate_new(handle_udev);
   if (enumerate == NULL) {
+    udev_unref(handle_udev);
     ERROR("fail udev_enumerate_new");
     return 1;
   }
@@ -130,6 +131,8 @@ static int create_ignorelist_by_serial(ignorelist_t *il) {
   udev_enumerate_scan_devices(enumerate);
   devices = udev_enumerate_get_list_entry(enumerate);
   if (devices == NULL) {
+    udev_enumerate_unref(enumerate);
+    udev_unref(handle_udev);
     ERROR("udev returned an empty list deviecs");
     return 1;
   }
@@ -153,6 +156,9 @@ static int create_ignorelist_by_serial(ignorelist_t *il) {
   if (invert_ignorelist == 0) {
     ignorelist_set_invert(ignorelist, 1);
   }
+
+  udev_enumerate_unref(enumerate);
+  udev_unref(handle_udev);
   return 0;
 }
 
@@ -606,6 +612,7 @@ static int smart_read(void) {
   }
   enumerate = udev_enumerate_new(handle_udev);
   if (enumerate == NULL) {
+    udev_unref(handle_udev);
     ERROR("fail udev_enumerate_new");
     return -1;
   }
@@ -614,6 +621,8 @@ static int smart_read(void) {
   udev_enumerate_scan_devices(enumerate);
   devices = udev_enumerate_get_list_entry(enumerate);
   if (devices == NULL) {
+    udev_enumerate_unref(enumerate);
+    udev_unref(handle_udev);
     ERROR("udev returned an empty list deviecs");
     return -1;
   }
