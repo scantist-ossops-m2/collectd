@@ -63,7 +63,7 @@ struct nvme_admin_cmd {
 #define NVME_IOCTL_ADMIN_CMD _IOWR('N', 0x41, struct nvme_admin_cmd)
 
 static const char *config_keys[] = {"Disk", "IgnoreSelected", "IgnoreSleepMode",
-                                    "UseSerial"};
+                                    "UseSerial", "ReportNVME"};
 
 static int config_keys_num = STATIC_ARRAY_SIZE(config_keys);
 
@@ -71,6 +71,7 @@ static ignorelist_t *ignorelist, *ignorelist_by_serial;
 static int ignore_sleep_mode;
 static int use_serial;
 static int invert_ignorelist;
+static bool report_nvme;
 
 static int smart_config(const char *key, const char *value) {
   if (ignorelist == NULL)
@@ -91,6 +92,8 @@ static int smart_config(const char *key, const char *value) {
   } else if (strcasecmp("UseSerial", key) == 0) {
     if (IS_TRUE(value))
       use_serial = 1;
+  } else if (strcasecmp("ReportNVME", key) == 0) {
+    report_nvme = IS_TRUE(value);
   } else {
     return -1;
   }
@@ -122,6 +125,7 @@ static int create_ignorelist_by_serial(ignorelist_t *il) {
   }
   enumerate = udev_enumerate_new(handle_udev);
   if (enumerate == NULL) {
+    udev_unref(handle_udev);
     ERROR("fail udev_enumerate_new");
     return 1;
   }
@@ -130,6 +134,8 @@ static int create_ignorelist_by_serial(ignorelist_t *il) {
   udev_enumerate_scan_devices(enumerate);
   devices = udev_enumerate_get_list_entry(enumerate);
   if (devices == NULL) {
+    udev_enumerate_unref(enumerate);
+    udev_unref(handle_udev);
     ERROR("udev returned an empty list deviecs");
     return 1;
   }
@@ -153,6 +159,9 @@ static int create_ignorelist_by_serial(ignorelist_t *il) {
   if (invert_ignorelist == 0) {
     ignorelist_set_invert(ignorelist, 1);
   }
+
+  udev_enumerate_unref(enumerate);
+  udev_unref(handle_udev);
   return 0;
 }
 
@@ -535,9 +544,7 @@ static void smart_read_sata_disk(SkDisk *d, char const *name) {
 }
 
 static void smart_handle_disk(const char *dev, const char *serial) {
-  SkDisk *d = NULL;
   const char *name;
-  int err;
 
   if (use_serial && serial) {
     name = serial;
@@ -563,7 +570,10 @@ static void smart_handle_disk(const char *dev, const char *serial) {
   DEBUG("smart plugin: checking SMART status of %s.", dev);
 
   if (strstr(dev, "nvme")) {
-    err = smart_read_nvme_disk(dev, name);
+    if (!report_nvme)
+      return;
+
+    int err = smart_read_nvme_disk(dev, name);
     if (err) {
       ERROR("smart plugin: smart_read_nvme_disk failed, %d", err);
     } else {
@@ -582,7 +592,7 @@ static void smart_handle_disk(const char *dev, const char *serial) {
     }
 
   } else {
-
+    SkDisk *d = NULL;
     if (sk_disk_open(dev, &d) < 0) {
       ERROR("smart plugin: unable to open %s.", dev);
       return;
@@ -606,6 +616,7 @@ static int smart_read(void) {
   }
   enumerate = udev_enumerate_new(handle_udev);
   if (enumerate == NULL) {
+    udev_unref(handle_udev);
     ERROR("fail udev_enumerate_new");
     return -1;
   }
@@ -614,6 +625,8 @@ static int smart_read(void) {
   udev_enumerate_scan_devices(enumerate);
   devices = udev_enumerate_get_list_entry(enumerate);
   if (devices == NULL) {
+    udev_enumerate_unref(enumerate);
+    udev_unref(handle_udev);
     ERROR("udev returned an empty list deviecs");
     return -1;
   }

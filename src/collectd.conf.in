@@ -1639,6 +1639,7 @@
 #<Plugin smart>
 #  Disk "/^[hs]d[a-f][0-9]?$/"
 #  IgnoreSelected false
+#  ReportNVME false
 #</Plugin>
 
 #<Plugin snmp>
