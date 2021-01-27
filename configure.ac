@@ -114,6 +114,7 @@ AM_CONDITIONAL([BUILD_DARWIN], [test "x$ac_system" = "xDarwin"])
 AM_CONDITIONAL([BUILD_FREEBSD], [test "x$ac_system" = "xFreeBSD"])
 AM_CONDITIONAL([BUILD_LINUX], [test "x$ac_system" = "xLinux"])
 AM_CONDITIONAL([BUILD_OPENBSD], [test "x$ac_system" = "xOpenBSD"])
+AM_CONDITIONAL([BUILD_NETBSD], [test "x$ac_system" = "xNetBSD"])
 AM_CONDITIONAL([BUILD_SOLARIS], [test "x$ac_system" = "xSolaris"])
 AM_CONDITIONAL([BUILD_WIN32], [test "x$ac_system" = "xWindows"])
 
@@ -3718,6 +3719,24 @@ if test "x$with_libmnl" = "xyes"; then
     [[#include <linux/if_link.h>]]
   )
 
+  AC_CHECK_DECLS([IFLA_VF_STATS_RX_DROPPED],
+    [AC_DEFINE(HAVE_IFLA_VF_STATS_RX_DROPPED, 1, [Define if IFLA_VF_STATS_RX_DROPPED exists.])],
+    [],
+    [[#include <linux/if_link.h>]]
+  )
+
+  AC_CHECK_DECLS([IFLA_VF_STATS_TX_DROPPED],
+    [AC_DEFINE(HAVE_IFLA_VF_STATS_TX_DROPPED, 1, [Define if IFLA_VF_STATS_TX_DROPPED exists.])],
+    [],
+    [[#include <linux/if_link.h>]]
+  )
+
+  AC_CHECK_DECLS([IFLA_VF_STATS],
+    [AC_DEFINE(HAVE_IFLA_VF_STATS, 1, [Define if IFLA_VF_STATS exists.])],
+    [],
+    [[#include <linux/if_link.h>]]
+  )
+
   AC_CHECK_LIB([mnl], [mnl_nlmsg_get_payload],
     [with_libmnl="yes"],
     [with_libmnl="no (symbol 'mnl_nlmsg_get_payload' not found)"],
@@ -6084,24 +6103,29 @@ if test "x$with_libvarnish" = "xyes"; then
   SAVE_CPPFLAGS="$CPPFLAGS"
   CPPFLAGS="$CPPFLAGS $with_libvarnish_cflags"
 
-  $PKG_CONFIG --atleast-version=5.2 'varnishapi' 2>/dev/null
+  $PKG_CONFIG --atleast-version=6 'varnishapi' 2>/dev/null
   if test $? -eq 0; then
-    AC_DEFINE([HAVE_VARNISH_V5], [1], [Varnish 5 API support])
+    AC_DEFINE([HAVE_VARNISH_V6], [1], [Varnish 6 API support])
   else
-    AC_CHECK_HEADERS([vapi/vsc.h],
-      [AC_DEFINE([HAVE_VARNISH_V4], [1], [Varnish 4 API support])],
-      [
-        AC_CHECK_HEADERS([vsc.h],
-          [AC_DEFINE([HAVE_VARNISH_V3], [1], [Varnish 3 API support]) ],
-          [
-            AC_CHECK_HEADERS([varnishapi.h],
-              [AC_DEFINE([HAVE_VARNISH_V2], [1], [Varnish 2 API support])],
-              [with_libvarnish="no (found none of the varnish header files)"]
-            )
-          ]
-        )
-      ]
-    )
+    $PKG_CONFIG --atleast-version=5.2 'varnishapi' 2>/dev/null
+    if test $? -eq 0; then
+      AC_DEFINE([HAVE_VARNISH_V5], [1], [Varnish 5 API support])
+    else
+      AC_CHECK_HEADERS([vapi/vsc.h],
+        [AC_DEFINE([HAVE_VARNISH_V4], [1], [Varnish 4 API support])],
+        [
+          AC_CHECK_HEADERS([vsc.h],
+            [AC_DEFINE([HAVE_VARNISH_V3], [1], [Varnish 3 API support]) ],
+            [
+              AC_CHECK_HEADERS([varnishapi.h],
+                [AC_DEFINE([HAVE_VARNISH_V2], [1], [Varnish 2 API support])],
+                [with_libvarnish="no (found none of the varnish header files)"]
+              )
+            ]
+          )
+        ]
+      )
+    fi
   fi
 
   CPPFLAGS="$SAVE_CPPFLAGS"
@@ -6590,6 +6614,7 @@ plugin_gps="no"
 plugin_gpu_nvidia="no"
 plugin_grpc="no"
 plugin_hugepages="no"
+plugin_infiniband="no"
 plugin_intel_pmu="no"
 plugin_intel_rdt="no"
 plugin_interface="no"
@@ -6601,8 +6626,10 @@ plugin_irq="no"
 plugin_load="no"
 plugin_log_logstash="no"
 plugin_mcelog="no"
+plugin_mdevents="no"
 plugin_memory="no"
 plugin_multimeter="no"
+plugin_netstat_udp="no"
 plugin_nfs="no"
 plugin_numa="no"
 plugin_nvme="no"
@@ -6654,11 +6681,13 @@ if test "x$ac_system" = "xLinux"; then
   plugin_fhcount="yes"
   plugin_fscache="yes"
   plugin_hugepages="yes"
+  plugin_infiniband="yes"
   plugin_interface="yes"
   plugin_ipc="yes"
   plugin_irq="yes"
   plugin_load="yes"
   plugin_mcelog="yes"
+  plugin_mdevents="yes"
   plugin_memory="yes"
   plugin_nfs="yes"
   plugin_numa="yes"
@@ -6718,6 +6747,7 @@ if test "x$ac_system" = "xNetBSD"; then
   plugin_irq="yes"
   plugin_nfs="yes"
   plugin_processes="yes"
+  plugin_netstat_udp="yes"
 fi
 
 # Mac OS X devices
@@ -7052,6 +7082,7 @@ AC_PLUGIN([gpu_nvidia],          [$with_cuda],                [NVIDIA GPU plugin
 AC_PLUGIN([grpc],                [$plugin_grpc],              [gRPC plugin])
 AC_PLUGIN([hddtemp],             [yes],                       [Query hddtempd])
 AC_PLUGIN([hugepages],           [$plugin_hugepages],         [Hugepages statistics])
+AC_PLUGIN([infiniband],          [$plugin_infiniband],        [Infiniband statistics])
 AC_PLUGIN([intel_pmu],           [$with_libjevents],          [Intel performance monitor plugin])
 AC_PLUGIN([intel_rdt],           [$with_libpqos],             [Intel RDT monitor plugin])
 AC_PLUGIN([interface],           [$plugin_interface],         [Interface traffic statistics])
@@ -7077,6 +7108,7 @@ AC_PLUGIN([match_value],         [yes],                       [The value match])
 AC_PLUGIN([mbmon],               [yes],                       [Query mbmond])
 AC_PLUGIN([mcelog],              [$plugin_mcelog],            [Machine Check Exceptions notifications])
 AC_PLUGIN([md],                  [$have_linux_raid_md_u_h],   [md (Linux software RAID) devices])
+AC_PLUGIN([mdevents],            [$plugin_mdevents],          [Events from md (Linux Software RAID) devices])
 AC_PLUGIN([memcachec],           [$with_libmemcached],        [memcachec statistics])
 AC_PLUGIN([memcached],           [yes],                       [memcached statistics])
 AC_PLUGIN([memory],              [$plugin_memory],            [Memory usage])
@@ -7088,6 +7120,7 @@ AC_PLUGIN([multimeter],          [$plugin_multimeter],        [Read multimeter v
 AC_PLUGIN([mysql],               [$with_libmysql],            [MySQL statistics])
 AC_PLUGIN([netapp],              [$with_libnetapp],           [NetApp plugin])
 AC_PLUGIN([netlink],             [$with_libmnl],              [Enhanced Linux network statistics])
+AC_PLUGIN([netstat_udp],         [$plugin_netstat_udp],       [UDP network statistics])
 AC_PLUGIN([network],             [yes],                       [Network communication plugin])
 AC_PLUGIN([nfs],                 [$plugin_nfs],               [NFS statistics])
 AC_PLUGIN([nginx],               [$with_libcurl],             [nginx statistics])
@@ -7498,6 +7531,7 @@ AC_MSG_RESULT([    gpu_nvidia  . . . . . $enable_gpu_nvidia])
 AC_MSG_RESULT([    grpc  . . . . . . . . $enable_grpc])
 AC_MSG_RESULT([    hddtemp . . . . . . . $enable_hddtemp])
 AC_MSG_RESULT([    hugepages . . . . . . $enable_hugepages])
+AC_MSG_RESULT([    infiniband  . . . . . $enable_infiniband])
 AC_MSG_RESULT([    intel_pmu . . . . . . $enable_intel_pmu])
 AC_MSG_RESULT([    intel_rdt . . . . . . $enable_intel_rdt])
 AC_MSG_RESULT([    interface . . . . . . $enable_interface])
@@ -7523,6 +7557,7 @@ AC_MSG_RESULT([    match_value . . . . . $enable_match_value])
 AC_MSG_RESULT([    mbmon . . . . . . . . $enable_mbmon])
 AC_MSG_RESULT([    mcelog  . . . . . . . $enable_mcelog])
 AC_MSG_RESULT([    md  . . . . . . . . . $enable_md])
+AC_MSG_RESULT([    mdevents  . . . . . . $enable_mdevents])
 AC_MSG_RESULT([    memcachec . . . . . . $enable_memcachec])
 AC_MSG_RESULT([    memcached . . . . . . $enable_memcached])
 AC_MSG_RESULT([    memory  . . . . . . . $enable_memory])
@@ -7534,6 +7569,7 @@ AC_MSG_RESULT([    multimeter  . . . . . $enable_multimeter])
 AC_MSG_RESULT([    mysql . . . . . . . . $enable_mysql])
 AC_MSG_RESULT([    netapp  . . . . . . . $enable_netapp])
 AC_MSG_RESULT([    netlink . . . . . . . $enable_netlink])
+AC_MSG_RESULT([    netstat_udp . . . . . $enable_netstat_udp])
 AC_MSG_RESULT([    network . . . . . . . $enable_network])
 AC_MSG_RESULT([    nfs . . . . . . . . . $enable_nfs])
 AC_MSG_RESULT([    nginx . . . . . . . . $enable_nginx])

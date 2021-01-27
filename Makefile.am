@@ -35,6 +35,8 @@ CLEANFILES = \
 	prometheus.pb-c.h \
 	src/pinba.pb-c.c \
 	src/pinba.pb-c.h \
+	types.grpc.pb.cc \
+	types.grpc.pb.h \
 	types.pb.cc \
 	types.pb.h
 
@@ -1137,6 +1139,13 @@ hugepages_la_SOURCES = src/hugepages.c
 hugepages_la_LDFLAGS = $(PLUGIN_LDFLAGS)
 endif
 
+if BUILD_PLUGIN_INFINIBAND
+pkglib_LTLIBRARIES += infiniband.la
+infiniband_la_SOURCES = src/infiniband.c
+infiniband_la_LDFLAGS = $(PLUGIN_LDFLAGS)
+infiniband_la_LIBADD = libignorelist.la
+endif
+
 if BUILD_PLUGIN_INTEL_PMU
 pkglib_LTLIBRARIES += intel_pmu.la
 intel_pmu_la_SOURCES = \
@@ -1166,9 +1175,9 @@ test_plugin_intel_rdt_SOURCES = \
 	src/utils/proc_pids/proc_pids.c \
 	src/daemon/configfile.c \
 	src/daemon/types_list.c
-test_plugin_intel_rdt_CPPFLAGS = $(AM_CPPFLAGS)
-test_plugin_intel_rdt_LDFLAGS = $(PLUGIN_LDFLAGS)
-test_plugin_intel_rdt_LDADD = liboconfig.la libplugin_mock.la
+test_plugin_intel_rdt_CPPFLAGS = $(AM_CPPFLAGS) $(BUILD_WITH_LIBPQOS_CPPFLAGS)
+test_plugin_intel_rdt_LDFLAGS = $(AM_LDFLAGS) $(BUILD_WITH_LIBPQOS_LDFLAGS)
+test_plugin_intel_rdt_LDADD = liboconfig.la libplugin_mock.la $(BUILD_WITH_LIBPQOS_LIBS)
 check_PROGRAMS += test_plugin_intel_rdt
 TESTS += test_plugin_intel_rdt
 
@@ -1389,6 +1398,21 @@ md_la_LDFLAGS = $(PLUGIN_LDFLAGS)
 md_la_LIBADD = libignorelist.la
 endif
 
+if BUILD_PLUGIN_MDEVENTS
+pkglib_LTLIBRARIES += mdevents.la
+mdevents_la_SOURCES = src/mdevents.c
+mdevents_la_CFLAGS = $(AM_FLAGS)
+mdevents_la_LDFLAGS = $(PLUGIN_LDFLAGS)
+mdevents_la_LIBADD = libignorelist.la
+
+test_plugin_mdevents_SOURCES = src/mdevents_test.c
+test_plugin_mdevents_CFLAGS = $(AM_FLAGS)
+test_plugin_mdevents_LDFLAGS = $(PLUGIN_LDFLAGS)
+test_plugin_mdevents_LDADD = libplugin_mock.la
+check_PROGRAMS += test_plugin_mdevents
+TESTS += test_plugin_mdevents
+endif
+
 if BUILD_PLUGIN_MEMCACHEC
 pkglib_LTLIBRARIES += memcachec.la
 memcachec_la_SOURCES = \
@@ -1491,6 +1515,19 @@ netlink_la_SOURCES = src/netlink.c
 netlink_la_CFLAGS = $(AM_CFLAGS) $(BUILD_WITH_LIBMNL_CFLAGS)
 netlink_la_LDFLAGS = $(PLUGIN_LDFLAGS)
 netlink_la_LIBADD = $(BUILD_WITH_LIBMNL_LIBS)
+
+test_plugin_netlink_SOURCES = \
+	src/netlink_test.c \
+	src/daemon/configfile.c \
+	src/daemon/types_list.c
+test_plugin_netlink_CFLAGS = $(AM_CFLAGS) $(BUILD_WITH_LIBMNL_CFLAGS)
+test_plugin_netlink_LDFLAGS = $(PLUGIN_LDFLAGS)
+test_plugin_netlink_LDADD = \
+	liboconfig.la \
+	libplugin_mock.la \
+	$(BUILD_WITH_LIBMNL_LIBS)
+check_PROGRAMS += test_plugin_netlink
+TESTS += test_plugin_netlink
 endif
 
 if BUILD_PLUGIN_NETWORK
@@ -1879,10 +1916,20 @@ endif
 if BUILD_PLUGIN_SMART
 if BUILD_WITH_LIBUDEV
 pkglib_LTLIBRARIES += smart.la
-smart_la_SOURCES = src/smart.c
+smart_la_SOURCES = \
+    src/smart.c \
+    src/nvme.h \
+    src/intel-nvme.h
 smart_la_CPPFLAGS = $(AM_CPPFLAGS) $(BUILD_WITH_LIBATASMART_CPPFLAGS) $(BUILD_WITH_LIBUDEV_CPPFLAGS)
 smart_la_LDFLAGS = $(PLUGIN_LDFLAGS) $(BUILD_WITH_LIBATASMART_LDFLAGS) $(BUILD_WITH_LIBUDEV_LDFLAGS)
 smart_la_LIBADD = libignorelist.la $(BUILD_WITH_LIBATASMART_LIBS) $(BUILD_WITH_LIBUDEV_LIBS)
+
+test_plugin_smart_SOURCES = src/smart_test.c
+test_plugin_smart_CPPFLAGS = $(AM_CPPFLAGS) $(BUILD_WITH_LIBATASMART_CPPFLAGS) $(BUILD_WITH_LIBUDEV_CPPFLAGS)
+test_plugin_smart_LDFLAGS = $(PLUGIN_LDFLAGS) $(BUILD_WITH_LIBATASMART_LDFLAGS) $(BUILD_WITH_LIBUDEV_LDFLAGS)
+test_plugin_smart_LDADD = libplugin_mock.la $(BUILD_WITH_LIBATASMART_LIBS) $(BUILD_WITH_LIBUDEV_LIBS)
+check_PROGRAMS += test_plugin_smart
+TESTS += test_plugin_smart
 endif
 endif
 
@@ -2382,9 +2429,9 @@ endif
 
 if HAVE_PROTOC3
 if HAVE_GRPC_CPP
-BUILT_SOURCES += collectd.grpc.pb.cc collectd.pb.cc types.pb.cc
+BUILT_SOURCES += collectd.grpc.pb.cc types.grpc.pb.cc collectd.pb.cc types.pb.cc
 
-collectd.grpc.pb.cc: $(srcdir)/proto/collectd.proto $(srcdir)/proto/types.proto
+collectd.grpc.pb.cc types.grpc.pb.cc: $(srcdir)/proto/collectd.proto $(srcdir)/proto/types.proto
 	$(V_PROTOC)$(PROTOC) -I$(srcdir)/proto \
 		--grpc_out=$(builddir) --plugin=protoc-gen-grpc=$(GRPC_CPP_PLUGIN) \
 	$(srcdir)/proto/collectd.proto $(srcdir)/proto/types.proto
