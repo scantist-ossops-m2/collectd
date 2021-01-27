@@ -7492,6 +7492,12 @@ enables the use of dynamic DNS services (like dyndns.org) with the ping plugin.
 
 Default: B<-1> (disabled)
 
+=item B<HostIsPluginInstance> B<true>|B<false>
+
+Option allows to report B<Host> as I<plugin instance>.
+Otherwise it will be reported as I<type instance>.
+Defaults to B<false> (report metrics as I<type instance>).
+
 =back
 
 =head2 Plugin C<postgresql>

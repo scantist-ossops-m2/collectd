@@ -81,6 +81,7 @@ static int ping_ttl = PING_DEF_TTL;
 static double ping_interval = 1.0;
 static double ping_timeout = 0.9;
 static int ping_max_missed = -1;
+static bool as_plugin_instance = 0;
 
 static pthread_mutex_t ping_lock = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t ping_cond = PTHREAD_COND_INITIALIZER;
@@ -93,7 +94,7 @@ static const char *config_keys[] = {"Host",    "SourceAddress", "AddressFamily",
                                     "Device",
 #endif
                                     "Size",    "TTL",           "Interval",
-                                    "Timeout", "MaxMissed"};
+                                    "Timeout", "MaxMissed", "HostIsPluginInstance"};
 static int config_keys_num = STATIC_ARRAY_SIZE(config_keys);
 
 /*
@@ -558,6 +559,8 @@ static int ping_config(const char *key, const char *value) /* {{{ */
     ping_max_missed = atoi(value);
     if (ping_max_missed < 0)
       INFO("ping plugin: MaxMissed < 0, disabled re-resolving of hosts");
+  } else if (strcasecmp("HostIsPluginInstance", key) == 0) {
+    as_plugin_instance = IS_TRUE(value);
   } else {
     return -1;
   }
@@ -572,7 +575,10 @@ static void submit(const char *host, const char *type, /* {{{ */
   vl.values = &(value_t){.gauge = value};
   vl.values_len = 1;
   sstrncpy(vl.plugin, "ping", sizeof(vl.plugin));
-  sstrncpy(vl.type_instance, host, sizeof(vl.type_instance));
+  if (as_plugin_instance)
+      sstrncpy(vl.plugin_instance, host, sizeof(vl.plugin_instance));
+  else
+      sstrncpy(vl.type_instance, host, sizeof(vl.type_instance));
   sstrncpy(vl.type, type, sizeof(vl.type));
 
   plugin_dispatch_values(&vl);
