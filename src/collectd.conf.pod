@@ -5609,6 +5609,7 @@ Synopsis:
       Host "localhost"
       Socket "/var/run/mysql/mysqld.sock"
       SlaveStats true
+      SlaveThreadsState true
       SlaveNotifications true
     </Database>
 
@@ -5683,6 +5684,12 @@ Disabled by default.
 Enable the collection of master / slave statistics in a replication setup. In
 order to be able to get access to these statistics, the user needs special
 privileges. See the B<User> documentation above. Defaults to B<false>.
+
+=item B<SlaveThreadsState> I<true|false>
+
+Enable collection of I/O and SQL threads running state.
+Option requires B<SlaveStats> to be enabled.
+Defaults to B<false>.
 
 =item B<SlaveNotifications> I<true|false>
 

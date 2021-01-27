@@ -60,6 +60,7 @@ struct mysql_database_s /* {{{ */
 
   bool master_stats;
   bool slave_stats;
+  bool slave_state;
   bool innodb_stats;
   bool wsrep_stats;
 
@@ -196,6 +197,8 @@ static int mysql_config_database(oconfig_item_t *ci) /* {{{ */
       status = cf_util_get_boolean(child, &db->master_stats);
     else if (strcasecmp("SlaveStats", child->key) == 0)
       status = cf_util_get_boolean(child, &db->slave_stats);
+    else if (strcasecmp("SlaveThreadsState", child->key) == 0)
+      status = cf_util_get_boolean(child, &db->slave_state);
     else if (strcasecmp("SlaveNotifications", child->key) == 0)
       status = cf_util_get_boolean(child, &db->slave_notif);
     else if (strcasecmp("InnodbStats", child->key) == 0)
@@ -474,6 +477,7 @@ static int mysql_read_slave_stats(mysql_database_t *db, MYSQL *con) {
     unsigned long long counter;
     double gauge;
 
+    if (db->slave_state) {
     gauge_submit("bool", "slave-sql-running",
                  (row[SLAVE_SQL_RUNNING_IDX] != NULL) &&
                      (strcasecmp(row[SLAVE_SQL_RUNNING_IDX], "yes") == 0),
@@ -483,6 +487,7 @@ static int mysql_read_slave_stats(mysql_database_t *db, MYSQL *con) {
                  (row[SLAVE_IO_RUNNING_IDX] != NULL) &&
                      (strcasecmp(row[SLAVE_IO_RUNNING_IDX], "yes") == 0),
                  db);
+    }
 
     counter = atoll(row[READ_MASTER_LOG_POS_IDX]);
     derive_submit("mysql_log_position", "slave-read", counter, db);
