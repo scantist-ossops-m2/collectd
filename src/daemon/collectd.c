@@ -35,6 +35,7 @@
 
 #include <netdb.h>
 #include <sys/types.h>
+#include <sys/resource.h>
 
 #if HAVE_LOCALE_H
 #include <locale.h>
@@ -241,6 +242,22 @@ static int do_init(void) {
   unsetenv("LC_ALL");
   setenv("LC_NUMERIC", COLLECTD_LOCALE, /* overwrite = */ 1);
 #endif
+
+  {
+    long priority = global_option_get_long("Priority", 0);
+    if (errno) {
+        ERROR("Priority option has wrong value. Default value will be used.");
+    }
+    if (priority > INT_MAX)
+      priority = INT_MAX;
+    if (priority < INT_MIN)
+      priority = INT_MIN;
+
+    if (priority != 0) {
+       if (setpriority(PRIO_PROCESS, 0, priority) == -1)
+          ERROR("Failed to set process priority: %s", STRERRNO);
+    }
+  }
 
 #if HAVE_LIBKSTAT
   kc = NULL;
