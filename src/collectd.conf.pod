@@ -288,6 +288,13 @@ Number of threads to start for dispatching value lists to write plugins. The
 default value is B<5>, but you may want to increase this if you have more than
 five plugins that may take relatively long to write to.
 
+=item B<Priority> I<Num>
+
+Set nice value (which affects scheduling priority) for the daemon process.
+The priority is set similarly to the nice command: a negative number means
+higher priority. Allowed range normally varies from -20 to 20.
+Defaults to 0.
+
 =item B<WriteQueueLimitHigh> I<HighNum>
 
 =item B<WriteQueueLimitLow> I<LowNum>

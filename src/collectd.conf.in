@@ -16,6 +16,7 @@
 #PIDFile     "@localstatedir@/run/@PACKAGE_NAME@.pid"
 #PluginDir   "@libdir@/@PACKAGE_NAME@"
 #TypesDB     "@prefix@/share/@PACKAGE_NAME@/types.db"
+#Priority    -10
 
 #----------------------------------------------------------------------------#
 # When enabled, plugins are loaded automatically with the default options    #
