@@ -63,7 +63,7 @@ struct nvme_admin_cmd {
 #define NVME_IOCTL_ADMIN_CMD _IOWR('N', 0x41, struct nvme_admin_cmd)
 
 static const char *config_keys[] = {"Disk", "IgnoreSelected", "IgnoreSleepMode",
-                                    "UseSerial"};
+                                    "UseSerial", "ReportNVME"};
 
 static int config_keys_num = STATIC_ARRAY_SIZE(config_keys);
 
@@ -71,6 +71,7 @@ static ignorelist_t *ignorelist, *ignorelist_by_serial;
 static int ignore_sleep_mode;
 static int use_serial;
 static int invert_ignorelist;
+static bool report_nvme;
 
 static int smart_config(const char *key, const char *value) {
   if (ignorelist == NULL)
@@ -91,6 +92,8 @@ static int smart_config(const char *key, const char *value) {
   } else if (strcasecmp("UseSerial", key) == 0) {
     if (IS_TRUE(value))
       use_serial = 1;
+  } else if (strcasecmp("ReportNVME", key) == 0) {
+    report_nvme = IS_TRUE(value);
   } else {
     return -1;
   }
@@ -541,9 +544,7 @@ static void smart_read_sata_disk(SkDisk *d, char const *name) {
 }
 
 static void smart_handle_disk(const char *dev, const char *serial) {
-  SkDisk *d = NULL;
   const char *name;
-  int err;
 
   if (use_serial && serial) {
     name = serial;
@@ -569,7 +570,10 @@ static void smart_handle_disk(const char *dev, const char *serial) {
   DEBUG("smart plugin: checking SMART status of %s.", dev);
 
   if (strstr(dev, "nvme")) {
-    err = smart_read_nvme_disk(dev, name);
+    if (!report_nvme)
+      return;
+
+    int err = smart_read_nvme_disk(dev, name);
     if (err) {
       ERROR("smart plugin: smart_read_nvme_disk failed, %d", err);
     } else {
@@ -588,7 +592,7 @@ static void smart_handle_disk(const char *dev, const char *serial) {
     }
 
   } else {
-
+    SkDisk *d = NULL;
     if (sk_disk_open(dev, &d) < 0) {
       ERROR("smart plugin: unable to open %s.", dev);
       return;
