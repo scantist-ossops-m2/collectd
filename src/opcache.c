@@ -571,7 +571,7 @@ static int cj_read(user_data_t *ud) {
   STATISTICS_VARIABLE(max_cached_keys, "max_cached_keys");
   STATISTICS_VARIABLE(hits, "hits");
   STATISTICS_VARIABLE(misses, "misses");
-  STATISTICS_VARIABLE(blacklist_misses, "blacklist_misses");
+  //STATISTICS_VARIABLE(blacklist_misses, "blacklist_misses");
 
   submit("objects", "scripts", &(value_t){.gauge = num_cached_scripts}, 1, db);
   submit("cache_size", "used", &(value_t){.gauge = num_cached_keys}, 1, db);
