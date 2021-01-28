@@ -6633,6 +6633,7 @@ plugin_netstat_udp="no"
 plugin_nfs="no"
 plugin_numa="no"
 plugin_nvme="no"
+plugin_opcache="no"
 plugin_ovs_events="no"
 plugin_ovs_stats="no"
 plugin_pcie_errors="no"
@@ -6834,6 +6835,7 @@ fi
 
 if test "x$with_libcurl" = "xyes" && test "x$with_libyajl" = "xyes"; then
   plugin_curl_json="yes"
+  plugin_opcache="yes"
 fi
 
 if test "x$with_libcurl" = "xyes" && test "x$with_libssl" = "xyes" && test "x$with_libyajl" = "xyes" && test "x$with_libyajl2" = "xyes"; then
@@ -7133,6 +7135,7 @@ AC_PLUGIN([nut],                 [$with_libupsclient],        [Network UPS tools
 AC_PLUGIN([nvme],                [$plugin_nvme],              [NVMe plugin])
 AC_PLUGIN([olsrd],               [yes],                       [olsrd statistics])
 AC_PLUGIN([onewire],             [$with_libowcapi],           [OneWire sensor statistics])
+AC_PLUGIN([opcache],             [$plugin_opcache],           [PHP opcache statistics])
 AC_PLUGIN([openldap],            [$with_libldap],             [OpenLDAP statistics])
 AC_PLUGIN([openvpn],             [yes],                       [OpenVPN client statistics])
 AC_PLUGIN([oracle],              [$with_oracle],              [Oracle plugin])
@@ -7582,6 +7585,7 @@ AC_MSG_RESULT([    nut . . . . . . . . . $enable_nut])
 AC_MSG_RESULT([    nvme  . . . . . . . . $enable_nvme])
 AC_MSG_RESULT([    olsrd . . . . . . . . $enable_olsrd])
 AC_MSG_RESULT([    onewire . . . . . . . $enable_onewire])
+AC_MSG_RESULT([    opcache . . . . . . . $enable_opcache])
 AC_MSG_RESULT([    openldap  . . . . . . $enable_openldap])
 AC_MSG_RESULT([    openvpn . . . . . . . $enable_openvpn])
 AC_MSG_RESULT([    oracle  . . . . . . . $enable_oracle])
