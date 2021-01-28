@@ -1649,6 +1649,17 @@ onewire_la_LDFLAGS = $(PLUGIN_LDFLAGS) $(BUILD_WITH_LIBOWCAPI_LDFLAGS)
 onewire_la_LIBADD = libignorelist.la $(BUILD_WITH_LIBOWCAPI_LIBS)
 endif
 
+if BUILD_PLUGIN_OPCACHE
+pkglib_LTLIBRARIES += opcache.la
+opcache_la_SOURCES = src/opcache.c \
+	src/utils/curl_stats/curl_stats.c \
+	src/utils/curl_stats/curl_stats.h
+opcache_la_CFLAGS = $(AM_CFLAGS) $(BUILD_WITH_LIBCURL_CFLAGS)
+opcache_la_CPPFLAGS = $(AM_CPPFLAGS) $(BUILD_WITH_LIBYAJL_CPPFLAGS)
+opcache_la_LDFLAGS = $(PLUGIN_LDFLAGS) $(BUILD_WITH_LIBYAJL_LDFLAGS)
+opcache_la_LIBADD = $(BUILD_WITH_LIBCURL_LIBS) $(BUILD_WITH_LIBYAJL_LIBS)
+endif
+
 if BUILD_PLUGIN_OPENLDAP
 pkglib_LTLIBRARIES += openldap.la
 openldap_la_SOURCES = src/openldap.c

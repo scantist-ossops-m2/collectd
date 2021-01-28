@@ -321,6 +321,8 @@ Paul Sadauskas <psadauskas at gmail.com>
 Pavel Rochnyack <pavel2000 at ngs.ru>
  - xencpu plugin.
  - mongodb plugin.
+ - nvme plugin.
+ - opcache plugin.
  - Bugfixes and enhancements in many places all around the project.
 
 Peter Holik <peter at holik.at>
