@@ -46,9 +46,6 @@ struct rrd_cache_s {
 };
 typedef struct rrd_cache_s rrd_cache_t;
 
-enum rrd_queue_dir_e { QUEUE_INSERT_FRONT, QUEUE_INSERT_BACK };
-typedef enum rrd_queue_dir_e rrd_queue_dir_t;
-
 struct rrd_queue_s {
   char *filename;
   struct rrd_queue_s *next;
