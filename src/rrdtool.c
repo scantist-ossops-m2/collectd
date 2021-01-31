@@ -537,8 +537,9 @@ static void rrd_cache_flush(cdtime_t timeout) {
   c_avl_iterator_destroy(iter);
 
   for (int i = 0; i < keys_num; i++) {
+    INFO("rrdtool plugin: removing %s from cache as expired.", keys[i]);
     if (c_avl_remove(cache, keys[i], (void *)&key, (void *)&rc) != 0) {
-      DEBUG("rrdtool plugin: c_avl_remove (%s) failed.", keys[i]);
+      ERROR("rrdtool plugin: c_avl_remove (%s) failed.", keys[i]);
       continue;
     }
 
@@ -555,6 +556,7 @@ static void rrd_cache_flush(cdtime_t timeout) {
   cache_flush_last = now;
 } /* void rrd_cache_flush */
 
+/* XXX: You must hold "cache_lock" when calling this function! */
 static int rrd_cache_flush_identifier(cdtime_t timeout,
                                       const char *identifier) {
   rrd_cache_t *rc;
@@ -644,6 +646,7 @@ static int rrd_cache_insert(const char *filename, const char *value,
   assert(value_time > 0); /* plugin_dispatch() ensures this. */
   if (rc->last_value >= value_time) {
     pthread_mutex_unlock(&cache_lock);
+    //Leave this message on DEBUG level - same reported in uc_update()
     DEBUG("rrdtool plugin: (rc->last_value = %" PRIu64 ") "
           ">= (value_time = %" PRIu64 ")",
           rc->last_value, value_time);
@@ -696,7 +699,14 @@ static int rrd_cache_insert(const char *filename, const char *value,
       return (-1);
     }
 
-    c_avl_insert(cache, cache_key, rc);
+    int status = c_avl_insert(cache, cache_key, rc);
+    if (status != 0) {
+        ERROR("rrdtool plugin: c_avl_insert failed.");
+        sfree(rc->values[0]);
+        sfree(rc->values);
+        sfree(rc);
+        return (-1);
+    }
   }
 
   DEBUG("rrdtool plugin: rrd_cache_insert: file = %s; "
