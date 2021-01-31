@@ -494,7 +494,6 @@ static int rrd_queue_dequeue(const char *filename, rrd_queue_t **head,
 /* XXX: You must hold "cache_lock" when calling this function! */
 static void rrd_cache_flush(cdtime_t timeout) {
   rrd_cache_t *rc;
-  cdtime_t now;
 
   char **keys = NULL;
   int keys_num = 0;
@@ -505,24 +504,36 @@ static void rrd_cache_flush(cdtime_t timeout) {
   DEBUG("rrdtool plugin: Flushing cache, timeout = %.3f",
         CDTIME_T_TO_DOUBLE(timeout));
 
-  now = cdtime();
+  cdtime_t now = cdtime();
+  cdtime_t ancient_point = now - cache_timeout;
+
+  //Avoid cache cleanup when two flushes called at the same time,
+  //or then metric just flushed before overall cache flush.
+  //Give "ancient" metrics a chance to reach cache when cache_timeout=0
+  //The goal: to save `last_value`, which is used in rrd_cache_insert.
+  if (cache_timeout == 0)
+    ancient_point = now - TIME_T_TO_CDTIME_T(600);
 
   /* Build a list of entries to be flushed */
   iter = c_avl_get_iterator(cache);
   while (c_avl_iterator_next(iter, (void *)&key, (void *)&rc) == 0) {
     if (rc->flags != FLAG_NONE)
-      continue;
-    /* timeout == 0  =>  flush everything */
-    else if ((timeout != 0) && ((now - rc->first_value) < timeout))
-      continue;
-    else if (rc->values_num > 0) {
-      int status;
+      continue; //Already in queue
 
-      status = rrd_queue_enqueue(key, &queue_head, &queue_tail);
+    /* timeout == 0  =>  flush everything */
+    if ((timeout != 0) && ((now - rc->first_value) < timeout))
+      continue; //Timeout not reached
+
+    //Has values, timeout reached
+    if (rc->values_num > 0) {
+      int status = rrd_queue_enqueue(key, &queue_head, &queue_tail);
       if (status == 0)
         rc->flags = FLAG_QUEUED;
-    } else /* ancient and no values -> waste of memory */
-    {
+      continue;
+    }
+
+    /* ancient and no values -> waste of memory */
+    if (rc->last_value < ancient_point) {
       char **tmp = realloc(keys, (keys_num + 1) * sizeof(char *));
       if (tmp == NULL) {
         char errbuf[1024];
