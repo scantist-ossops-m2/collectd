@@ -562,7 +562,10 @@ static void rrd_cache_flush(cdtime_t timeout) {
 
   sfree(keys);
 
-  cache_flush_last = now;
+  //Do not move next cache scan time if rrd_flush() timeout value
+  //is outside of cache_timeout value.
+  if (timeout <= (cache_timeout + random_timeout))
+    cache_flush_last = now;
 } /* void rrd_cache_flush */
 
 /* XXX: You must hold "cache_lock" when calling this function! */
