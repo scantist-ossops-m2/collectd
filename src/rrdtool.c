@@ -46,9 +46,6 @@ struct rrd_cache_s {
 };
 typedef struct rrd_cache_s rrd_cache_t;
 
-enum rrd_queue_dir_e { QUEUE_INSERT_FRONT, QUEUE_INSERT_BACK };
-typedef enum rrd_queue_dir_e rrd_queue_dir_t;
-
 struct rrd_queue_s {
   char *filename;
   struct rrd_queue_s *next;
@@ -115,7 +112,11 @@ static int srrd_update(char *filename, char *template, int argc,
   optind = 0; /* bug in librrd? */
   rrd_clear_error();
 
+#ifdef RRD_SKIP_PAST_UPDATES
+  status = rrd_updatex_r(filename, template, RRD_SKIP_PAST_UPDATES, argc, (void *)argv);
+#else
   status = rrd_update_r(filename, template, argc, (void *)argv);
+#endif
 
   if (status != 0) {
     WARNING("rrdtool plugin: rrd_update_r (%s) failed: %s", filename,
@@ -493,7 +494,6 @@ static int rrd_queue_dequeue(const char *filename, rrd_queue_t **head,
 /* XXX: You must hold "cache_lock" when calling this function! */
 static void rrd_cache_flush(cdtime_t timeout) {
   rrd_cache_t *rc;
-  cdtime_t now;
 
   char **keys = NULL;
   int keys_num = 0;
@@ -504,24 +504,42 @@ static void rrd_cache_flush(cdtime_t timeout) {
   DEBUG("rrdtool plugin: Flushing cache, timeout = %.3f",
         CDTIME_T_TO_DOUBLE(timeout));
 
-  now = cdtime();
+  cdtime_t now = cdtime();
+
+  //Just flushed
+  if (timeout && (timeout > (now - cache_flush_last)))
+    return;
+
+  cdtime_t ancient_point = now - cache_timeout;
+  cdtime_t flush_point = now - timeout;
+
+  //Avoid cache cleanup when two flushes called at the same time,
+  //or then metric just flushed before overall cache flush.
+  //Give "ancient" metrics a chance to reach cache when cache_timeout=0
+  //The goal: to save `last_value`, which is used in rrd_cache_insert.
+  if (cache_timeout == 0)
+    ancient_point = now - TIME_T_TO_CDTIME_T(600);
 
   /* Build a list of entries to be flushed */
   iter = c_avl_get_iterator(cache);
   while (c_avl_iterator_next(iter, (void *)&key, (void *)&rc) == 0) {
     if (rc->flags != FLAG_NONE)
-      continue;
-    /* timeout == 0  =>  flush everything */
-    else if ((timeout != 0) && ((now - rc->first_value) < timeout))
-      continue;
-    else if (rc->values_num > 0) {
-      int status;
+      continue; //Already in queue
 
-      status = rrd_queue_enqueue(key, &queue_head, &queue_tail);
+    /* timeout == 0  =>  flush everything */
+    if ((timeout != 0) && (flush_point < rc->first_value))
+      continue; //Timeout not reached
+
+    //Has values, timeout reached
+    if (rc->values_num > 0) {
+      int status = rrd_queue_enqueue(key, &queue_head, &queue_tail);
       if (status == 0)
         rc->flags = FLAG_QUEUED;
-    } else /* ancient and no values -> waste of memory */
-    {
+      continue;
+    }
+
+    /* ancient and no values -> waste of memory */
+    if (rc->last_value < ancient_point) {
       char **tmp = realloc(keys, (keys_num + 1) * sizeof(char *));
       if (tmp == NULL) {
         char errbuf[1024];
@@ -540,8 +558,9 @@ static void rrd_cache_flush(cdtime_t timeout) {
   c_avl_iterator_destroy(iter);
 
   for (int i = 0; i < keys_num; i++) {
+    INFO("rrdtool plugin: removing %s from cache as expired.", keys[i]);
     if (c_avl_remove(cache, keys[i], (void *)&key, (void *)&rc) != 0) {
-      DEBUG("rrdtool plugin: c_avl_remove (%s) failed.", keys[i]);
+      ERROR("rrdtool plugin: c_avl_remove (%s) failed.", keys[i]);
       continue;
     }
 
@@ -555,9 +574,13 @@ static void rrd_cache_flush(cdtime_t timeout) {
 
   sfree(keys);
 
-  cache_flush_last = now;
+  //Do not move next cache scan time if rrd_flush() timeout value
+  //is outside of cache_timeout value.
+  if (timeout <= (cache_timeout + random_timeout))
+    cache_flush_last = now;
 } /* void rrd_cache_flush */
 
+/* XXX: You must hold "cache_lock" when calling this function! */
 static int rrd_cache_flush_identifier(cdtime_t timeout,
                                       const char *identifier) {
   rrd_cache_t *rc;
@@ -647,6 +670,7 @@ static int rrd_cache_insert(const char *filename, const char *value,
   assert(value_time > 0); /* plugin_dispatch() ensures this. */
   if (rc->last_value >= value_time) {
     pthread_mutex_unlock(&cache_lock);
+    //Leave this message on DEBUG level - same reported in uc_update()
     DEBUG("rrdtool plugin: (rc->last_value = %" PRIu64 ") "
           ">= (value_time = %" PRIu64 ")",
           rc->last_value, value_time);
@@ -699,7 +723,14 @@ static int rrd_cache_insert(const char *filename, const char *value,
       return (-1);
     }
 
-    c_avl_insert(cache, cache_key, rc);
+    int status = c_avl_insert(cache, cache_key, rc);
+    if (status != 0) {
+        ERROR("rrdtool plugin: c_avl_insert failed.");
+        sfree(rc->values[0]);
+        sfree(rc->values);
+        sfree(rc);
+        return (-1);
+    }
   }
 
   DEBUG("rrdtool plugin: rrd_cache_insert: file = %s; "
