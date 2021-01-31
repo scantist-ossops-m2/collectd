@@ -45,9 +45,6 @@ typedef struct rrd_cache_s {
   enum { FLAG_NONE = 0x00, FLAG_QUEUED = 0x01, FLAG_FLUSHQ = 0x02 } flags;
 } rrd_cache_t;
 
-enum rrd_queue_dir_e { QUEUE_INSERT_FRONT, QUEUE_INSERT_BACK };
-typedef enum rrd_queue_dir_e rrd_queue_dir_t;
-
 struct rrd_queue_s {
   char *filename;
   struct rrd_queue_s *next;
