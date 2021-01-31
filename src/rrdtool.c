@@ -502,11 +502,6 @@ static void rrd_cache_flush(cdtime_t timeout) {
         CDTIME_T_TO_DOUBLE(timeout));
 
   cdtime_t now = cdtime();
-
-  //Just flushed
-  if (timeout && (timeout > (now - cache_flush_last)))
-    return;
-
   cdtime_t ancient_point = now - cache_timeout;
   cdtime_t flush_point = now - timeout;
 
@@ -862,6 +857,10 @@ static int rrd_flush(cdtime_t timeout, const char *identifier,
   if (cache == NULL) {
     pthread_mutex_unlock(&cache_lock);
     return 0;
+  }
+
+  if ((identifier == NULL) && (timeout == 0)) {
+    NOTICE("rrdtool plugin: Requested flush for all cache data.");
   }
 
   rrd_cache_flush_identifier(timeout, identifier);
