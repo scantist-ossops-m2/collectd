@@ -502,7 +502,13 @@ static void rrd_cache_flush(cdtime_t timeout) {
         CDTIME_T_TO_DOUBLE(timeout));
 
   cdtime_t now = cdtime();
+
+  //Just flushed
+  if (timeout && (timeout > (now - cache_flush_last)))
+    return;
+
   cdtime_t ancient_point = now - cache_timeout;
+  cdtime_t flush_point = now - timeout;
 
   //Avoid cache cleanup when two flushes called at the same time,
   //or then metric just flushed before overall cache flush.
@@ -518,7 +524,7 @@ static void rrd_cache_flush(cdtime_t timeout) {
       continue; //Already in queue
 
     /* timeout == 0  =>  flush everything */
-    if ((timeout != 0) && ((now - rc->first_value) < timeout))
+    if ((timeout != 0) && (flush_point < rc->first_value))
       continue; //Timeout not reached
 
     //Has values, timeout reached
