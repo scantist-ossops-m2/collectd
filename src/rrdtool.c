@@ -502,11 +502,6 @@ static void rrd_cache_flush(cdtime_t timeout) {
         CDTIME_T_TO_DOUBLE(timeout));
 
   cdtime_t now = cdtime();
-
-  //Just flushed
-  if (timeout && (timeout > (now - cache_flush_last)))
-    return;
-
   cdtime_t ancient_point = now - cache_timeout;
   cdtime_t flush_point = now - timeout;
 
@@ -567,11 +562,6 @@ static void rrd_cache_flush(cdtime_t timeout) {
   } /* for (i = 0..keys_num) */
 
   sfree(keys);
-
-  //Do not move next cache scan time if rrd_flush() timeout value
-  //is outside of cache_timeout value.
-  if (timeout <= (cache_timeout + random_timeout))
-    cache_flush_last = now;
 } /* void rrd_cache_flush */
 
 /* XXX: You must hold "cache_lock" when calling this function! */
@@ -743,9 +733,13 @@ static int rrd_cache_insert(const char *filename, const char *value,
     }
   }
 
-  if ((cache_timeout > 0) &&
-      ((cdtime() - cache_flush_last) > cache_flush_timeout))
-    rrd_cache_flush(cache_timeout + random_timeout);
+  if (cache_timeout > 0) {
+    cdtime_t now = cdtime();
+    if ((now - cache_flush_last) > cache_flush_timeout) {
+      rrd_cache_flush(cache_timeout + random_timeout);
+      cache_flush_last = now;
+    }
+  }
 
   pthread_mutex_unlock(&cache_lock);
 
@@ -862,6 +856,10 @@ static int rrd_flush(cdtime_t timeout, const char *identifier,
   if (cache == NULL) {
     pthread_mutex_unlock(&cache_lock);
     return 0;
+  }
+
+  if ((identifier == NULL) && (timeout == 0)) {
+    NOTICE("rrdtool plugin: Requested flush for all cache data.");
   }
 
   rrd_cache_flush_identifier(timeout, identifier);

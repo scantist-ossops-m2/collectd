@@ -74,7 +74,7 @@ sub getRRDArgs
     "VDEF:v_user_min=user_min,MINIMUM",
     "VDEF:v_user_avg=user_avg,AVERAGE",
     "VDEF:v_user_max=user_max,MAXIMUM",
-    "VDEF:v_user_lst=syst_avg,LAST",
+    "VDEF:v_user_lst=user_avg,LAST",
     "VDEF:v_syst_min=syst_min,MINIMUM",
     "VDEF:v_syst_avg=syst_avg,AVERAGE",
     "VDEF:v_syst_max=syst_max,MAXIMUM",
