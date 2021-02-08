@@ -57,7 +57,7 @@ typedef struct rrd_queue_s rrd_queue_t;
 static const char *config_keys[] = {
     "CacheTimeout", "CacheFlush",      "CreateFilesAsync", "DataDir",
     "StepSize",     "HeartBeat",       "RRARows",          "RRATimespan",
-    "XFF",          "WritesPerSecond", "RandomTimeout"};
+    "XFF",          "WritesPerSecond", "RandomTimeout",    "ReportStats"};
 static int config_keys_num = STATIC_ARRAY_SIZE(config_keys);
 
 /* If datadir is zero, the daemon's basedir is used. If stepsize or heartbeat
@@ -65,6 +65,7 @@ static int config_keys_num = STATIC_ARRAY_SIZE(config_keys);
  * being used. */
 static char *datadir;
 static double write_rate;
+static bool report_stats;
 static rrdcreate_config_t rrdcreate_config = {
     /* stepsize = */ 0,
     /* heartbeat = */ 0,
@@ -87,11 +88,16 @@ static cdtime_t random_timeout;
 static cdtime_t cache_flush_last;
 static c_avl_tree_t *cache;
 static pthread_mutex_t cache_lock = PTHREAD_MUTEX_INITIALIZER;
+static size_t cache_values_cnt;
 
 static rrd_queue_t *queue_head;
 static rrd_queue_t *queue_tail;
+static size_t queue_size;
+static derive_t stats_queue_dequeued;
 static rrd_queue_t *flushq_head;
 static rrd_queue_t *flushq_tail;
+static size_t flushq_size;
+static derive_t stats_flushq_dequeued;
 static pthread_t queue_thread;
 static int queue_thread_running = 1;
 static pthread_mutex_t queue_lock = PTHREAD_MUTEX_INITIALIZER;
@@ -102,6 +108,66 @@ static pthread_mutex_t librrd_lock = PTHREAD_MUTEX_INITIALIZER;
 #endif
 
 static int do_shutdown;
+
+static int rrd_read(void) {
+  value_list_t vl = VALUE_LIST_INIT;
+  value_t values[1];
+
+  /* Initialize `vl' */
+  vl.values = values;
+  vl.values_len = 1;
+  sstrncpy(vl.plugin, "rrdtool", sizeof(vl.plugin));
+
+  pthread_mutex_lock(&cache_lock);
+
+  size_t cache_size = c_avl_size(cache);
+  size_t values_cnt = cache_values_cnt;
+
+  pthread_mutex_unlock(&cache_lock);
+  pthread_mutex_lock(&queue_lock);
+
+  gauge_t l_queue_size = queue_size;
+  gauge_t l_flushq_size = flushq_size;
+  derive_t l_wq_dq = stats_queue_dequeued;
+  derive_t l_fq_dq = stats_flushq_dequeued;
+
+  pthread_mutex_unlock(&queue_lock);
+
+  /* Size of write queue */
+  sstrncpy(vl.type, "gauge", sizeof(vl.type));
+  sstrncpy(vl.type_instance, "wqsize", sizeof(vl.type_instance));
+  vl.values[0].gauge = l_queue_size;
+  plugin_dispatch_values(&vl);
+
+  /* Size of flush queue */
+  sstrncpy(vl.type_instance, "fqsize", sizeof(vl.type_instance));
+  vl.values[0].gauge = l_flushq_size;
+  plugin_dispatch_values(&vl);
+
+  /* Size of cache, metrics */
+  sstrncpy(vl.type_instance, "cachesize", sizeof(vl.type_instance));
+  vl.values[0].gauge = cache_size;
+  plugin_dispatch_values(&vl);
+
+  /* Size of cache, values */
+  sstrncpy(vl.type_instance, "values", sizeof(vl.type_instance));
+  vl.values[0].gauge = values_cnt;
+  plugin_dispatch_values(&vl);
+
+  /* Write rate */
+  sstrncpy(vl.type, "derive", sizeof(vl.type));
+  sstrncpy(vl.type_instance, "write", sizeof(vl.type_instance));
+  vl.values[0].derive = l_wq_dq;
+  plugin_dispatch_values(&vl);
+
+  /* Flush rate */
+  sstrncpy(vl.type, "derive", sizeof(vl.type));
+  sstrncpy(vl.type_instance, "flush", sizeof(vl.type_instance));
+  vl.values[0].derive = l_fq_dq;
+  plugin_dispatch_values(&vl);
+
+  return 0;
+}
 
 #if HAVE_THREADSAFE_LIBRRD
 static int srrd_update(char *filename, int argc, const char **argv) {
@@ -346,6 +412,8 @@ static void *rrd_queue_thread(void __attribute__((unused)) * data) {
 
     if (flushq_head != NULL) {
       /* Dequeue the first flush entry */
+      flushq_size--;
+      stats_flushq_dequeued++;
       queue_entry = flushq_head;
       if (flushq_head == flushq_tail)
         flushq_head = flushq_tail = NULL;
@@ -354,6 +422,8 @@ static void *rrd_queue_thread(void __attribute__((unused)) * data) {
     } else /* if (queue_head != NULL) */
     {
       /* Dequeue the first regular entry */
+      queue_size--;
+      stats_queue_dequeued++;
       queue_entry = queue_head;
       if (queue_head == queue_tail)
         queue_head = queue_tail = NULL;
@@ -373,6 +443,8 @@ static void *rrd_queue_thread(void __attribute__((unused)) * data) {
     if (status == 0) {
       values = cache_entry->values;
       values_num = cache_entry->values_num;
+
+      cache_values_cnt-= values_num;
 
       cache_entry->values = NULL;
       cache_entry->values_num = 0;
@@ -417,7 +489,7 @@ static void *rrd_queue_thread(void __attribute__((unused)) * data) {
 } /* void *rrd_queue_thread */
 
 static int rrd_queue_enqueue(const char *filename, rrd_queue_t **head,
-                             rrd_queue_t **tail) {
+                             rrd_queue_t **tail, size_t *size) {
   rrd_queue_t *queue_entry;
 
   queue_entry = malloc(sizeof(*queue_entry));
@@ -440,6 +512,8 @@ static int rrd_queue_enqueue(const char *filename, rrd_queue_t **head,
     (*tail)->next = queue_entry;
   *tail = queue_entry;
 
+  (*size)++;
+
   pthread_cond_signal(&queue_cond);
   pthread_mutex_unlock(&queue_lock);
 
@@ -447,7 +521,7 @@ static int rrd_queue_enqueue(const char *filename, rrd_queue_t **head,
 } /* int rrd_queue_enqueue */
 
 static int rrd_queue_dequeue(const char *filename, rrd_queue_t **head,
-                             rrd_queue_t **tail) {
+                             rrd_queue_t **tail, size_t *size) {
   rrd_queue_t *this;
   rrd_queue_t *prev;
 
@@ -476,6 +550,8 @@ static int rrd_queue_dequeue(const char *filename, rrd_queue_t **head,
 
   if (this->next == NULL)
     *tail = prev;
+
+  (*size)--;
 
   pthread_mutex_unlock(&queue_lock);
 
@@ -521,7 +597,7 @@ static void rrd_cache_flush(cdtime_t timeout) {
 
     // Has values, timeout reached
     if (rc->values_num > 0) {
-      int status = rrd_queue_enqueue(key, &queue_head, &queue_tail);
+      int status = rrd_queue_enqueue(key, &queue_head, &queue_tail, &queue_size);
       if (status == 0)
         rc->flags = FLAG_QUEUED;
       continue;
@@ -593,14 +669,14 @@ static int rrd_cache_flush_identifier(cdtime_t timeout,
   if (rc->flags == FLAG_FLUSHQ) {
     status = 0;
   } else if (rc->flags == FLAG_QUEUED) {
-    rrd_queue_dequeue(key, &queue_head, &queue_tail);
-    status = rrd_queue_enqueue(key, &flushq_head, &flushq_tail);
+    rrd_queue_dequeue(key, &queue_head, &queue_tail, &queue_size);
+    status = rrd_queue_enqueue(key, &flushq_head, &flushq_tail, &flushq_size);
     if (status == 0)
       rc->flags = FLAG_FLUSHQ;
   } else if ((now - rc->first_value) < timeout) {
     status = 0;
   } else if (rc->values_num > 0) {
-    status = rrd_queue_enqueue(key, &flushq_head, &flushq_tail);
+    status = rrd_queue_enqueue(key, &flushq_head, &flushq_tail, &flushq_size);
     if (status == 0)
       rc->flags = FLAG_FLUSHQ;
   }
@@ -676,8 +752,10 @@ static int rrd_cache_insert(const char *filename, const char *value,
   rc->values = values_new;
 
   rc->values[rc->values_num] = strdup(value);
-  if (rc->values[rc->values_num] != NULL)
+  if (rc->values[rc->values_num] != NULL) {
     rc->values_num++;
+    cache_values_cnt++;
+  }
 
   if (rc->values_num == 1)
     rc->first_value = value_time;
@@ -688,6 +766,7 @@ static int rrd_cache_insert(const char *filename, const char *value,
     void *cache_key = strdup(filename);
 
     if (cache_key == NULL) {
+      cache_values_cnt--;
       pthread_mutex_unlock(&cache_lock);
 
       ERROR("rrdtool plugin: strdup failed: %s", STRERRNO);
@@ -700,6 +779,7 @@ static int rrd_cache_insert(const char *filename, const char *value,
 
     int status = c_avl_insert(cache, cache_key, rc);
     if (status != 0) {
+      cache_values_cnt--;
       pthread_mutex_unlock(&cache_lock);
       ERROR("rrdtool plugin: c_avl_insert failed.");
       sfree(cache_key);
@@ -722,7 +802,7 @@ static int rrd_cache_insert(const char *filename, const char *value,
     if (rc->flags == FLAG_NONE) {
       int status;
 
-      status = rrd_queue_enqueue(filename, &queue_head, &queue_tail);
+      status = rrd_queue_enqueue(filename, &queue_head, &queue_tail, &queue_size);
       if (status == 0)
         rc->flags = FLAG_QUEUED;
 
@@ -1007,6 +1087,8 @@ static int rrd_config(const char *key, const char *value) {
     } else {
       random_timeout = DOUBLE_TO_CDTIME_T(tmp);
     }
+  } else if (strcasecmp("ReportStats", key) == 0) {
+    report_stats = IS_TRUE(value);
   } else {
     return -1;
   }
@@ -1093,6 +1175,9 @@ static int rrd_init(void) {
     return -1;
   }
   queue_thread_running = 1;
+
+  if (report_stats)
+    plugin_register_read("rrdtool", rrd_read);
 
   DEBUG("rrdtool plugin: rrd_init: datadir = %s; stepsize = %lu;"
         " heartbeat = %i; rrarows = %i; xff = %lf;",
