@@ -29,7 +29,10 @@
 
 /* Types are registered only in `config` phase, so access is not protected by
  * locks */
-c_avl_tree_t *types_tree = NULL;
+static c_avl_tree_t *types_tree = NULL;
+static cdtime_t startup_timeout = TIME_T_TO_CDTIME_T_STATIC(60);
+static int startup_threshold = 3600;
+static cdtime_t start = 0;
 
 static int format_uptime(unsigned long uptime_sec, char *buf, size_t bufsize) {
 
@@ -136,6 +139,12 @@ static int cu_cache_event(cache_event_t *event,
     if (c_avl_get(types_tree, event->value_list->type, NULL) == 0) {
       event->ret = 1;
       assert(event->value_list->values_len > 0);
+
+      cdtime_t now = cdtime();
+      if (((now - start) < startup_timeout) &&
+          (event->value_list->values[0].gauge > startup_threshold))
+        break;
+
       cu_notify(CE_VALUE_NEW, event->value_list, NAN /* old */,
                 event->value_list->values[0].gauge /* new */);
     }
@@ -179,29 +188,32 @@ static int cu_config(oconfig_item_t *ci) {
   for (int i = 0; i < ci->children_num; ++i) {
     oconfig_item_t *child = ci->children + i;
     if (strcasecmp("Type", child->key) == 0) {
-      if ((child->values_num != 1) ||
-          (child->values[0].type != OCONFIG_TYPE_STRING)) {
-        WARNING("check_uptime plugin: The `Type' option needs exactly one "
-                "string argument.");
-        return -1;
-      }
-      char *type = child->values[0].value.string;
+      char *type;
+      int status = cf_util_get_string(child, &type);
+      if (status != 0)
+        return status;
 
       if (c_avl_get(types_tree, type, NULL) == 0) {
         ERROR("check_uptime plugin: Type `%s' already added.", type);
+        sfree(type);
         return -1;
       }
 
-      char *type_copy = strdup(type);
-      if (type_copy == NULL) {
-        ERROR("check_uptime plugin: strdup failed.");
-        return -1;
-      }
-
-      int status = c_avl_insert(types_tree, type_copy, NULL);
+      status = c_avl_insert(types_tree, type, NULL);
       if (status != 0) {
         ERROR("check_uptime plugin: c_avl_insert failed.");
-        sfree(type_copy);
+        sfree(type);
+        return -1;
+      }
+    } else if (strcasecmp("StartupTimeout", child->key) == 0) {
+      if (cf_util_get_cdtime(child, &startup_timeout) != 0)
+        return -1;
+    } else if (strcasecmp("StartupThreshold", child->key) == 0) {
+      if (cf_util_get_int(child, &startup_threshold) != 0)
+        return -1;
+      if (startup_threshold < 0) {
+        ERROR("check_uptime plugin: The \"StartupThreshold\" value must be "
+              "positive (or zero).");
         return -1;
       }
     } else
@@ -260,6 +272,8 @@ static int cu_init(void) {
     }
   }
   c_avl_iterator_destroy(iter);
+
+  start = cdtime();
 
   if (ret == 0)
     plugin_register_cache_event("check_uptime", cu_cache_event, NULL);

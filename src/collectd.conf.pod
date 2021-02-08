@@ -1667,11 +1667,11 @@ sent about host/service restart.
 When no new updates comes for metric and cache entry expires, then FAILURE
 notification is sent about unreachable host or service.
 
-By default (when no explicit configuration), plugin checks for I<uptime> metric.
-
 B<Synopsis:>
 
  <Plugin "check_uptime">
+   #StartupTimeout 60
+   #StartupThreshold 3600
    Type "uptime"
    Type "my_uptime_type"
  </Plugin>
@@ -1681,7 +1681,21 @@ B<Synopsis:>
 =item B<Type> I<Type>
 
 Metric type to check for status/values. The type should consist single GAUGE
-data source.
+data source. When no types are configured, plugin checks for I<uptime> metric.
+
+=item B<StartupTimeout> I<Value>
+
+=item B<StartupThreshold> I<Value>
+
+When Collectd restarts, cache is empty. This can result sending unnecessary
+notifications for each running host/service. These options allow to avoid this.
+
+During B<StartupTimeout> seconds after Collectd start, it will send OK
+notifications only for services which uptime is less than B<StartupThreshold>
+(i.e. which was (re-)started while Collectd was offline).
+
+B<StartupTimeout> defaults to 60 seconds.
+B<StartupThreshold> defaults to 3600 seconds.
 
 =back
 
