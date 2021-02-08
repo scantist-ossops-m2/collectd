@@ -29,7 +29,10 @@
 
 /* Types are registered only in `config` phase, so access is not protected by
  * locks */
-c_avl_tree_t *types_tree = NULL;
+static c_avl_tree_t *types_tree = NULL;
+static cdtime_t startup_timeout = TIME_T_TO_CDTIME_T_STATIC(60);
+static int startup_threshold = 3600;
+static cdtime_t start = 0;
 
 static int format_uptime(unsigned long uptime_sec, char *buf, size_t bufsize) {
 
@@ -136,6 +139,12 @@ static int cu_cache_event(cache_event_t *event,
     if (c_avl_get(types_tree, event->value_list->type, NULL) == 0) {
       event->ret = 1;
       assert(event->value_list->values_len > 0);
+
+      cdtime_t now = cdtime();
+      if (((now - start) < startup_timeout) &&
+          (event->value_list->values[0].gauge > startup_threshold))
+        break;
+
       cu_notify(CE_VALUE_NEW, event->value_list, NAN /* old */,
                 event->value_list->values[0].gauge /* new */);
     }
@@ -196,6 +205,17 @@ static int cu_config(oconfig_item_t *ci) {
         sfree(type);
         return -1;
       }
+    } else if (strcasecmp("StartupTimeout", child->key) == 0) {
+      if (cf_util_get_cdtime(child, &startup_timeout) != 0)
+        return -1;
+    } else if (strcasecmp("StartupThreshold", child->key) == 0) {
+      if (cf_util_get_int(child, &startup_threshold) != 0)
+        return -1;
+      if (startup_threshold < 0) {
+        ERROR("check_uptime plugin: The \"StartupThreshold\" value must be "
+              "positive (or zero).");
+        return -1;
+      }
     } else
       WARNING("check_uptime plugin: Ignore unknown config option `%s'.",
               child->key);
@@ -252,6 +272,8 @@ static int cu_init(void) {
     }
   }
   c_avl_iterator_destroy(iter);
+
+  start = cdtime();
 
   if (ret == 0)
     plugin_register_cache_event("check_uptime", cu_cache_event, NULL);

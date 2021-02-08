@@ -408,6 +408,13 @@
 #  </Daemon>
 #</Plugin>
 
+#<Plugin "check_uptime">
+#   #StartupTimeout 60
+#   #StartupThreshold 3600
+#   Type "uptime"
+#   Type "my_uptime_type"
+#</Plugin>
+
 #<Plugin chrony>
 #	Host    "localhost"
 #	Port    "323"
