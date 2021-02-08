@@ -179,29 +179,21 @@ static int cu_config(oconfig_item_t *ci) {
   for (int i = 0; i < ci->children_num; ++i) {
     oconfig_item_t *child = ci->children + i;
     if (strcasecmp("Type", child->key) == 0) {
-      if ((child->values_num != 1) ||
-          (child->values[0].type != OCONFIG_TYPE_STRING)) {
-        WARNING("check_uptime plugin: The `Type' option needs exactly one "
-                "string argument.");
-        return -1;
-      }
-      char *type = child->values[0].value.string;
+      char *type;
+      int status = cf_util_get_string(child, &type);
+      if (status != 0)
+        return status;
 
       if (c_avl_get(types_tree, type, NULL) == 0) {
         ERROR("check_uptime plugin: Type `%s' already added.", type);
+        sfree(type);
         return -1;
       }
 
-      char *type_copy = strdup(type);
-      if (type_copy == NULL) {
-        ERROR("check_uptime plugin: strdup failed.");
-        return -1;
-      }
-
-      int status = c_avl_insert(types_tree, type_copy, NULL);
+      status = c_avl_insert(types_tree, type, NULL);
       if (status != 0) {
         ERROR("check_uptime plugin: c_avl_insert failed.");
-        sfree(type_copy);
+        sfree(type);
         return -1;
       }
     } else
