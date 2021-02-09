@@ -104,15 +104,15 @@ static pthread_mutex_t librrd_lock = PTHREAD_MUTEX_INITIALIZER;
 static int do_shutdown;
 
 #if HAVE_THREADSAFE_LIBRRD
-static int srrd_update(char *filename, char *template, int argc,
-                       const char **argv) {
+static int srrd_update(char *filename, int argc, const char **argv) {
   optind = 0; /* bug in librrd? */
   rrd_clear_error();
 
 #ifdef RRD_SKIP_PAST_UPDATES
-  int status = rrd_updatex_r(filename, template, RRD_SKIP_PAST_UPDATES, argc, (void *)argv);
+  int status =
+      rrd_updatex_r(filename, NULL, RRD_SKIP_PAST_UPDATES, argc, (void *)argv);
 #else
-  int status = rrd_update_r(filename, template, argc, (void *)argv);
+  int status = rrd_update_r(filename, NULL, argc, (void *)argv);
 #endif
 
   if (status != 0) {
@@ -122,17 +122,14 @@ static int srrd_update(char *filename, char *template, int argc,
 
   return status;
 } /* int srrd_update */
-  /* #endif HAVE_THREADSAFE_LIBRRD */
+/* #endif HAVE_THREADSAFE_LIBRRD */
 
 #else  /* !HAVE_THREADSAFE_LIBRRD */
-static int srrd_update(char *filename, char *template, int argc,
-                       const char **argv) {
+static int srrd_update(char *filename, int argc, const char **argv) {
   int status;
 
   int new_argc;
   char **new_argv;
-
-  assert(template == NULL);
 
   new_argc = 2 + argc;
   new_argv = malloc((new_argc + 1) * sizeof(*new_argv));
@@ -403,7 +400,7 @@ static void *rrd_queue_thread(void __attribute__((unused)) * data) {
     }
 
     /* Write the values to the RRD-file */
-    srrd_update(queue_entry->filename, NULL, values_num, (const char **)values);
+    srrd_update(queue_entry->filename, values_num, (const char **)values);
     DEBUG("rrdtool plugin: queue thread: Wrote %i value%s to %s", values_num,
           (values_num == 1) ? "" : "s", queue_entry->filename);
 
@@ -505,10 +502,10 @@ static void rrd_cache_flush(cdtime_t timeout) {
   cdtime_t ancient_point = now - cache_timeout;
   cdtime_t flush_point = now - timeout;
 
-  //Avoid cache cleanup when two flushes called at the same time,
-  //or then metric just flushed before overall cache flush.
-  //Give "ancient" metrics a chance to reach cache when cache_timeout=0
-  //The goal: to save `last_value`, which is used in rrd_cache_insert.
+  // Avoid cache cleanup when two flushes called at the same time,
+  // or then metric just flushed before overall cache flush.
+  // Give "ancient" metrics a chance to reach cache when cache_timeout=0
+  // The goal: to save `last_value`, which is used in rrd_cache_insert.
   if (cache_timeout == 0)
     ancient_point = now - TIME_T_TO_CDTIME_T(600);
 
@@ -516,13 +513,13 @@ static void rrd_cache_flush(cdtime_t timeout) {
   iter = c_avl_get_iterator(cache);
   while (c_avl_iterator_next(iter, (void *)&key, (void *)&rc) == 0) {
     if (rc->flags != FLAG_NONE)
-      continue; //Already in queue
+      continue; // Already in queue
 
     /* timeout == 0  =>  flush everything */
     if ((timeout != 0) && (flush_point < rc->first_value))
-      continue; //Timeout not reached
+      continue; // Timeout not reached
 
-    //Has values, timeout reached
+    // Has values, timeout reached
     if (rc->values_num > 0) {
       int status = rrd_queue_enqueue(key, &queue_head, &queue_tail);
       if (status == 0)
@@ -654,7 +651,7 @@ static int rrd_cache_insert(const char *filename, const char *value,
   assert(value_time > 0); /* plugin_dispatch() ensures this. */
   if (rc->last_value >= value_time) {
     pthread_mutex_unlock(&cache_lock);
-    //Leave this message on DEBUG level - same reported in uc_update()
+    // Leave this message on DEBUG level - same reported in uc_update()
     DEBUG("rrdtool plugin: (rc->last_value = %" PRIu64 ") "
           ">= (value_time = %" PRIu64 ")",
           rc->last_value, value_time);
@@ -703,11 +700,13 @@ static int rrd_cache_insert(const char *filename, const char *value,
 
     int status = c_avl_insert(cache, cache_key, rc);
     if (status != 0) {
-        ERROR("rrdtool plugin: c_avl_insert failed.");
-        sfree(rc->values[0]);
-        sfree(rc->values);
-        sfree(rc);
-        return (-1);
+      pthread_mutex_unlock(&cache_lock);
+      ERROR("rrdtool plugin: c_avl_insert failed.");
+      sfree(cache_key);
+      sfree(rc->values[0]);
+      sfree(rc->values);
+      sfree(rc);
+      return -1;
     }
   }
 
