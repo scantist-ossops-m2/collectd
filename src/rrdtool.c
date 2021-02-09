@@ -104,15 +104,14 @@ static pthread_mutex_t librrd_lock = PTHREAD_MUTEX_INITIALIZER;
 static int do_shutdown;
 
 #if HAVE_THREADSAFE_LIBRRD
-static int srrd_update(char *filename, char *template, int argc,
-                       const char **argv) {
+static int srrd_update(char *filename, int argc, const char **argv) {
   optind = 0; /* bug in librrd? */
   rrd_clear_error();
 
 #ifdef RRD_SKIP_PAST_UPDATES
-  int status = rrd_updatex_r(filename, template, RRD_SKIP_PAST_UPDATES, argc, (void *)argv);
+  int status = rrd_updatex_r(filename, NULL, RRD_SKIP_PAST_UPDATES, argc, (void *)argv);
 #else
-  int status = rrd_update_r(filename, template, argc, (void *)argv);
+  int status = rrd_update_r(filename, NULL, argc, (void *)argv);
 #endif
 
   if (status != 0) {
@@ -125,14 +124,11 @@ static int srrd_update(char *filename, char *template, int argc,
   /* #endif HAVE_THREADSAFE_LIBRRD */
 
 #else  /* !HAVE_THREADSAFE_LIBRRD */
-static int srrd_update(char *filename, char *template, int argc,
-                       const char **argv) {
+static int srrd_update(char *filename, int argc, const char **argv) {
   int status;
 
   int new_argc;
   char **new_argv;
-
-  assert(template == NULL);
 
   new_argc = 2 + argc;
   new_argv = malloc((new_argc + 1) * sizeof(*new_argv));
@@ -403,7 +399,7 @@ static void *rrd_queue_thread(void __attribute__((unused)) * data) {
     }
 
     /* Write the values to the RRD-file */
-    srrd_update(queue_entry->filename, NULL, values_num, (const char **)values);
+    srrd_update(queue_entry->filename, values_num, (const char **)values);
     DEBUG("rrdtool plugin: queue thread: Wrote %i value%s to %s", values_num,
           (values_num == 1) ? "" : "s", queue_entry->filename);
 
