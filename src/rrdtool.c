@@ -703,11 +703,13 @@ static int rrd_cache_insert(const char *filename, const char *value,
 
     int status = c_avl_insert(cache, cache_key, rc);
     if (status != 0) {
+        pthread_mutex_unlock(&cache_lock);
         ERROR("rrdtool plugin: c_avl_insert failed.");
+        sfree(cache_key);
         sfree(rc->values[0]);
         sfree(rc->values);
         sfree(rc);
-        return (-1);
+        return -1;
     }
   }
 
