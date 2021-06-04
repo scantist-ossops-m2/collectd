@@ -1167,6 +1167,9 @@
 #		MasterStats true
 #		ConnectTimeout 10
 #		InnodbStats true
+#		ResponseTimeStats true
+#		ResponseTimeReadStats true
+#		ResponseTimeWriteStats true
 #	</Database>
 #
 #	<Database db_name2>

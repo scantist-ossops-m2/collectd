@@ -37,6 +37,7 @@
 #elif defined(HAVE_MYSQL_MYSQL_H)
 #include <mysql/mysql.h>
 #endif
+#include <mysql/mysqld_error.h>
 
 struct mysql_database_s /* {{{ */
 {
@@ -63,6 +64,9 @@ struct mysql_database_s /* {{{ */
   bool slave_state;
   bool innodb_stats;
   bool wsrep_stats;
+  bool response_time_total_stats;
+  bool response_time_read_stats;
+  bool response_time_write_stats;
 
   bool slave_notif;
   bool slave_io_running;
@@ -205,6 +209,12 @@ static int mysql_config_database(oconfig_item_t *ci) /* {{{ */
       status = cf_util_get_boolean(child, &db->innodb_stats);
     else if (strcasecmp("WsrepStats", child->key) == 0)
       status = cf_util_get_boolean(child, &db->wsrep_stats);
+    else if (strcasecmp("ResponseTimeTotalStats", child->key) == 0)
+      status = cf_util_get_boolean(child, &db->response_time_total_stats);
+    else if (strcasecmp("ResponseTimeReadStats", child->key) == 0)
+      status = cf_util_get_boolean(child, &db->response_time_read_stats);
+    else if (strcasecmp("ResponseTimeWriteStats", child->key) == 0)
+      status = cf_util_get_boolean(child, &db->response_time_write_stats);
     else {
       WARNING("mysql plugin: Option `%s' not allowed here.", child->key);
       status = -1;
@@ -651,6 +661,112 @@ static int mysql_read_innodb_stats(mysql_database_t *db, MYSQL *con) {
   return 0;
 }
 
+static int mysql_read_response_time_total_stats(mysql_database_t *db, MYSQL *con) {
+  const char *query = "SELECT time, count, total*1000000 FROM INFORMATION_SCHEMA.QUERY_RESPONSE_TIME where count > 0";
+
+  MYSQL_RES *res = exec_query(con, query);
+  if (res == NULL) {
+    if (mysql_errno(con) == ER_UNKNOWN_TABLE) {
+       ERROR("mysql plugin: Disabled option ResponseTimeTotalStats, not supported by server configuration.");
+       db->response_time_total_stats = 0;
+    }
+    return -1;
+  }
+
+  MYSQL_ROW row;
+  while ((row = mysql_fetch_row(res))) {
+    char *time = row[0];
+    unsigned long long count = atoll(row[1]);
+    unsigned long long total = atoll(row[2]);
+    char type_instance[DATA_MAX_NAME_LEN];
+
+    if (count == 0)
+      continue;
+
+    /* trim spaces */
+    while (time[0] == ' ')
+      time++;
+
+    snprintf(type_instance, sizeof(type_instance), "response_time-%s", time);
+    derive_submit("mysql_query_total_rate", type_instance, (derive_t)count, db);
+    derive_submit("mysql_query_total_time", type_instance, (derive_t)total, db);
+  }
+
+  mysql_free_result(res);
+  return 0;
+}
+
+static int mysql_read_response_time_write_stats(mysql_database_t *db, MYSQL *con) {
+  const char *query = "SELECT time, count, total*1000000 FROM INFORMATION_SCHEMA.QUERY_RESPONSE_TIME_WRITE where count > 0";
+
+  MYSQL_RES *res = exec_query(con, query);
+  if (res == NULL) {
+    if (mysql_errno(con) == ER_UNKNOWN_TABLE) {
+       ERROR("mysql plugin: Disabled option ResponseTimeWriteStats, not supported by server configuration.");
+       db->response_time_write_stats = 0;
+    }
+    return -1;
+  }
+
+  MYSQL_ROW row;
+  while ((row = mysql_fetch_row(res))) {
+    char *time = row[0];
+    unsigned long long count = atoll(row[1]);
+    unsigned long long total = atoll(row[2]);
+    char type_instance[DATA_MAX_NAME_LEN];
+
+    if (count == 0)
+      continue;
+
+    /* trim spaces */
+    while (time[0] == ' ')
+      time++;
+
+    snprintf(type_instance, sizeof(type_instance), "response_time-%s", time);
+    derive_submit("mysql_query_write_rate", type_instance, (derive_t)count, db);
+    derive_submit("mysql_query_write_time", type_instance, (derive_t)total, db);
+  }
+
+  mysql_free_result(res);
+  return 0;
+}
+
+static int mysql_read_response_time_read_stats(mysql_database_t *db, MYSQL *con) {
+  const char *query = "SELECT time, count, total*1000000 FROM INFORMATION_SCHEMA.QUERY_RESPONSE_TIME_READ where count > 0";
+
+  MYSQL_RES *res = exec_query(con, query);
+  if (res == NULL) {
+    if (mysql_errno(con) == ER_UNKNOWN_TABLE) {
+       ERROR("mysql plugin: Disabled option ResponseTimeReadStats, not supported by server configuration.");
+       db->response_time_read_stats = 0;
+    }
+    return -1;
+  }
+
+  MYSQL_ROW row;
+  while ((row = mysql_fetch_row(res))) {
+    char *time = row[0];
+    unsigned long long count = atoll(row[1]);
+    unsigned long long total = atoll(row[2]);
+    char type_instance[DATA_MAX_NAME_LEN];
+
+    if (count == 0)
+      continue;
+
+    /* trim spaces */
+    while (time[0] == ' ')
+      time++;
+
+    snprintf(type_instance, sizeof(type_instance), "response_time-%s", time);
+    derive_submit("mysql_query_read_rate", type_instance, (derive_t)count, db);
+    derive_submit("mysql_query_read_time", type_instance, (derive_t)total, db);
+  }
+
+  mysql_free_result(res);
+  return 0;
+}
+
+
 static int mysql_read_wsrep_stats(mysql_database_t *db, MYSQL *con) {
   MYSQL_RES *res;
   MYSQL_ROW row;
@@ -963,6 +1079,13 @@ static int mysql_read(user_data_t *ud) {
 
   if (db->wsrep_stats)
     mysql_read_wsrep_stats(db, con);
+
+  if (db->response_time_total_stats)
+    mysql_read_response_time_total_stats(db, con);
+  if (db->response_time_read_stats)
+    mysql_read_response_time_read_stats(db, con);
+  if (db->response_time_write_stats)
+    mysql_read_response_time_write_stats(db, con);
 
   return 0;
 } /* int mysql_read */
