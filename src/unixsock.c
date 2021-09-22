@@ -32,6 +32,7 @@
 #include "utils/cmds/flush.h"
 #include "utils/cmds/getthreshold.h"
 #include "utils/cmds/getval.h"
+#include "utils/cmds/gethistory.h"
 #include "utils/cmds/listval.h"
 #include "utils/cmds/putnotif.h"
 #include "utils/cmds/putval.h"
@@ -243,6 +244,8 @@ static void *us_handle_client(void *arg) {
 
     if (strcasecmp(fields[0], "getval") == 0) {
       cmd_handle_getval(fhout, buffer);
+    } else if (strcasecmp(fields[0], "gethistory") == 0) {
+      handle_gethistory(fhout, buffer);
     } else if (strcasecmp(fields[0], "getthreshold") == 0) {
       handle_getthreshold(fhout, buffer);
     } else if (strcasecmp(fields[0], "putval") == 0) {

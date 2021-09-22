@@ -307,6 +307,43 @@ sub getval # {{{
 	return $ret;
 } # }}} sub getval
 
+sub gethistory # {{{
+{
+	my $self = shift;
+	my %args = @_;
+	my $ret = {};
+
+	if (!$args{period})
+	{
+		cluck ("Need argument `period'");
+		return;
+	}
+
+	my $identifier = _create_identifier (\%args) or return;
+
+	my $command = 'GETHISTORY '
+	. _escape_argument ($identifier)
+	. " period=$args{period}";
+
+	my $msg = $self->_socket_command($command) or return;
+	$self->_socket_chat($msg, sub {
+			local $_ = shift;
+			my $ret = shift;
+			if ($_ =~ /^(\w+)=NaN$/) {
+				$ret->{$1} ||= [];
+				push @{$ret->{$1}}, undef;
+				return;
+			}
+			if (($_ =~ /^(\w+)=(.*)$/) and looks_like_number($2)) {
+				$ret->{$1} ||= [];
+				push @{$ret->{$1}}, 0 + $2;
+				return;
+			}
+		}, $ret
+	);
+	return $ret;
+} # }}} sub gethistory
+
 =item I<$res> = I<$self>-E<gt>B<getthreshold> (I<%identifier>);
 
 Requests a threshold from the daemon. On success a hash-ref is returned with

@@ -63,6 +63,8 @@ int uc_get_history(const data_set_t *ds, const value_list_t *vl,
 int uc_get_history_by_name(const char *name, gauge_t *ret_history,
                            size_t num_steps, size_t num_ds);
 
+int uc_get_interval_by_name(const char *name, cdtime_t *interval);
+
 /*
  * Iterator interface
  */
