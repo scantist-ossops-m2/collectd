@@ -504,6 +504,8 @@ libcmds_la_SOURCES = \
 	src/utils/cmds/getthreshold.h \
 	src/utils/cmds/getval.c \
 	src/utils/cmds/getval.h \
+	src/utils/cmds/gethistory.c \
+	src/utils/cmds/gethistory.h \
 	src/utils/cmds/listval.c \
 	src/utils/cmds/listval.h \
 	src/utils/cmds/putnotif.c \

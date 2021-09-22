@@ -855,6 +855,24 @@ int uc_inc_hits(const data_set_t *ds, const value_list_t *vl, int step) {
   return ret;
 } /* int uc_inc_hits */
 
+int uc_get_interval_by_name(const char *name, cdtime_t *interval) {
+  cache_entry_t *ce = NULL;
+  int status = 0;
+
+  pthread_mutex_lock(&cache_lock);
+
+  if (c_avl_get(cache_tree, name, (void *)&ce) == 0) {
+    *interval = ce->interval;
+  } else {
+    DEBUG("utils_cache: uc_get_interval_by_name: No such value: %s", name);
+    status = -ENOENT;
+  }
+
+  pthread_mutex_unlock(&cache_lock);
+
+  return status;
+} /* int uc_get_interval_by_name */
+
 /*
  * Iterator interface
  */
