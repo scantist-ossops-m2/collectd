@@ -244,6 +244,7 @@ static int do_init(void) {
 #endif
 
   {
+    errno = 0;
     long priority = global_option_get_long("Priority", 0);
     if (errno) {
         ERROR("Priority option has wrong value. Default value will be used.");
