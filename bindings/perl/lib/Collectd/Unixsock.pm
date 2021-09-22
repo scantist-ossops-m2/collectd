@@ -297,14 +297,13 @@ sub getval # {{{
 	my $ret = {};
 
 	my $msg = $self->_socket_command('GETVAL', \%args) or return;
-	$self->_socket_chat($msg, sub {
+	return $self->_socket_chat($msg, sub {
 			local $_ = shift;
 			my $ret = shift;
 			/^(\w+)=NaN$/ and $ret->{$1} = undef, return;
 			/^(\w+)=(.*)$/ and looks_like_number($2) and $ret->{$1} = 0 + $2, return;
 		}, $ret
 	);
-	return $ret;
 } # }}} sub getval
 
 sub gethistory # {{{
@@ -326,7 +325,7 @@ sub gethistory # {{{
 	. " period=$args{period}";
 
 	my $msg = $self->_socket_command($command) or return;
-	$self->_socket_chat($msg, sub {
+	return $self->_socket_chat($msg, sub {
 			local $_ = shift;
 			my $ret = shift;
 			if ($_ =~ /^(\w+)=NaN$/) {
@@ -341,7 +340,6 @@ sub gethistory # {{{
 			}
 		}, $ret
 	);
-	return $ret;
 } # }}} sub gethistory
 
 =item I<$res> = I<$self>-E<gt>B<getthreshold> (I<%identifier>);
