@@ -187,7 +187,7 @@ int handle_gethistory(FILE *fh, char *buffer) {
     return -1;
   }
 
-  print_to_socket(fh, "%i Success\n", num_steps * ds->ds_num);
+  print_to_socket(fh, "%i Success\n", (int)(num_steps * ds->ds_num));
 
   for (size_t i = 0; i < num_steps; i++)
     for (size_t j = 0; j < ds->ds_num; j++) {
