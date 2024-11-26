@@ -1357,12 +1357,17 @@ static int csnmp_read_table(host_definition_t *host, data_definition_t *data) {
     if (oid_list_todo_num == 0) {
       /* The request is still empty - so we are finished */
       DEBUG("snmp plugin: all variables have left their subtree");
+      snmp_free_pdu(req);
       status = 0;
       break;
     }
 
     res = NULL;
     status = snmp_sess_synch_response(host->sess_handle, req, &res);
+
+    /* snmp_sess_synch_response always frees our req PDU */
+    req = NULL;
+
     if ((status != STAT_SUCCESS) || (res == NULL)) {
       char *errstr = NULL;
 
@@ -1376,8 +1381,6 @@ static int csnmp_read_table(host_definition_t *host, data_definition_t *data) {
         snmp_free_pdu(res);
       res = NULL;
 
-      /* snmp_synch_response already freed our PDU */
-      req = NULL;
       sfree(errstr);
       csnmp_host_close_session(host);
 
@@ -1393,6 +1396,156 @@ static int csnmp_read_table(host_definition_t *host, data_definition_t *data) {
 
     vb = res->variables;
     if (vb == NULL) {
+      status = -1;
+      break;
+    }
+
+    if (res->errstat != SNMP_ERR_NOERROR) {
+      if (res->errindex != 0 && res->errindex < oid_list_len) {
+        /* Find the OID which caused error */
+        for (i = 1, vb = res->variables; vb != NULL && i != res->errindex;
+             vb = vb->next_variable, i++)
+          /* do nothing */;
+
+        char oid_buffer[1024] = {0};
+        snprint_objid(oid_buffer, sizeof(oid_buffer) - 1, vb->name,
+                      vb->name_length);
+        NOTICE("snmp plugin: host %s; data %s: OID `%s` failed: %s",
+               host->name, data->name, oid_buffer,
+               snmp_errstring(res->errstat));
+
+        /* Skip that OID */
+        i = res->errindex - 1;
+        while ((i < oid_list_len) && !oid_list_todo[i])
+          i++;
+
+        oid_list_todo[i] = 0;
+
+        snmp_free_pdu(res);
+        res = NULL;
+        continue;
+      }
+
+      ERROR("snmp plugin: host %s; data %s: response error: %s (%li) ",
+            host->name, data->name, snmp_errstring(res->errstat), res->errstat);
+      status = -1;
+      break;
+    }
+
+    if (res->errstat != SNMP_ERR_NOERROR) {
+      if (res->errindex != 0 && res->errindex < oid_list_len) {
+        /* Find the OID which caused error */
+        for (i = 1, vb = res->variables; vb != NULL && i != res->errindex;
+             vb = vb->next_variable, i++)
+          /* do nothing */;
+
+        char oid_buffer[1024] = {0};
+        snprint_objid(oid_buffer, sizeof(oid_buffer) - 1, vb->name,
+                      vb->name_length);
+        NOTICE("snmp plugin: host %s; data %s: OID `%s` failed: %s.",
+               host->name, data->name, oid_buffer,
+               snmp_errstring(res->errstat));
+
+        /* Skip that OID */
+        i = res->errindex - 1;
+        while ((i < oid_list_len) && !oid_list_todo[i])
+          i++;
+
+        oid_list_todo[i] = 0;
+
+        snmp_free_pdu(res);
+        res = NULL;
+        continue;
+      }
+
+      ERROR("snmp plugin: host %s; data %s: response error: %s (%li) ",
+            host->name, data->name, snmp_errstring(res->errstat), res->errstat);
+      status = -1;
+      break;
+    }
+
+    if (res->errstat != SNMP_ERR_NOERROR) {
+      if (res->errindex != 0 && res->errindex < oid_list_len) {
+        /* Find the OID which caused error */
+        for (i = 1, vb = res->variables; vb != NULL && i != res->errindex;
+             vb = vb->next_variable, i++)
+          /* do nothing */;
+
+        char oid_buffer[1024] = {0};
+        snprint_objid(oid_buffer, sizeof(oid_buffer) - 1, vb->name,
+                      vb->name_length);
+        NOTICE("snmp plugin: host %s; data %s: OID `%s` failed: %s",
+               host->name, data->name, oid_buffer,
+               snmp_errstring(res->errstat));
+
+        /* Skip that OID */
+        i = res->errindex - 1;
+        while ((i < oid_list_len) && !oid_list_todo[i])
+          i++;
+
+        oid_list_todo[i] = 0;
+
+        snmp_free_pdu(res);
+        res = NULL;
+        continue;
+      }
+
+      ERROR("snmp plugin: host %s; data %s: response error: %s (%li) ",
+            host->name, data->name, snmp_errstring(res->errstat), res->errstat);
+      status = -1;
+      break;
+    }
+
+    if (res->errstat != SNMP_ERR_NOERROR) {
+      if (res->errindex != 0 && res->errindex < oid_list_len) {
+        //Find the OID which caused error
+        for (i = 1, vb = res->variables; vb != NULL && i != res->errindex; vb = vb->next_variable, i++)
+          /*EMPTY*/;
+
+        char oid_buffer[1024] = {0};
+        snprint_objid(oid_buffer, sizeof(oid_buffer) - 1, vb->name, vb->name_length);
+        NOTICE("snmp plugin: host %s; data %s: Unable to find value for OID `%s`.", host->name, data->name, oid_buffer);
+
+        //Skip that OID
+        i = res->errindex - 1;
+        while ((i < oid_list_len) && !oid_list_todo[i])
+          i++;
+
+        oid_list_todo[i] = 0;
+
+        snmp_free_pdu(res);
+        res = NULL;
+        continue;
+      }
+
+      ERROR("snmp plugin: host %s; data %s: response error: %s (%li) ", host->name, data->name, snmp_errstring(res->errstat), res->errstat);
+      status = -1;
+      break;
+    }
+
+    if (res->errstat != SNMP_ERR_NOERROR) {
+      if (res->errindex != 0 && res->errindex < oid_list_len) {
+        //Find the OID which caused error
+        for (i = 1, vb = res->variables; vb != NULL && i != res->errindex; vb = vb->next_variable, i++)
+          /*EMPTY*/;
+
+        char oid_buffer[1024] = {0};
+        snprint_objid(oid_buffer, sizeof(oid_buffer) - 1, vb->name, vb->name_length);
+        NOTICE("snmp plugin: host %s; data %s: Unable to find value for OID `%s`.", host->name, data->name, oid_buffer);
+
+        //Skip that OID
+        i = res->errindex - 1;
+        while ((i < oid_list_len) && !oid_list_todo[i])
+          i++;
+
+        oid_list_todo[i] = 0;
+
+        snmp_free_pdu(res);
+        res = NULL;
+        continue;
+      }
+
+      ERROR("snmp plugin: host %s; data %s: response error: %s (%li) ", host->name, data->name, snmp_errstring(res->errstat), res->errstat);
       status = -1;
       break;
     }
@@ -1492,9 +1645,6 @@ static int csnmp_read_table(host_definition_t *host, data_definition_t *data) {
     snmp_free_pdu(res);
   res = NULL;
 
-  if (req != NULL)
-    snmp_free_pdu(req);
-  req = NULL;
 
   if (status == 0)
     csnmp_dispatch_table(host, data, instance_list_head, value_list_head);
