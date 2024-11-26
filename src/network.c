@@ -1430,6 +1430,7 @@ static int parse_packet (sockent_t *se, /* {{{ */
 				printed_ignore_warning = 1;
 			}
 			buffer = ((char *) buffer) + pkg_length;
+			buffer_size -= (size_t) pkg_length;
 			continue;
 		}
 #endif /* HAVE_LIBGCRYPT */
@@ -1457,6 +1458,7 @@ static int parse_packet (sockent_t *se, /* {{{ */
 				printed_ignore_warning = 1;
 			}
 			buffer = ((char *) buffer) + pkg_length;
+			buffer_size -= (size_t) pkg_length;
 			continue;
 		}
 #endif /* HAVE_LIBGCRYPT */
@@ -1598,6 +1600,7 @@ static int parse_packet (sockent_t *se, /* {{{ */
 			DEBUG ("network plugin: parse_packet: Unknown part"
 					" type: 0x%04hx", pkg_type);
 			buffer = ((char *) buffer) + pkg_length;
+			buffer_size -= (size_t) pkg_length;
 		}
 	} /* while (buffer_size > sizeof (part_header_t)) */
 
