@@ -500,6 +500,8 @@ static int network_dispatch_notification (notification_t *n) /* {{{ */
 #if HAVE_LIBGCRYPT
 static void network_init_gcrypt (void) /* {{{ */
 {
+  gcry_error_t err;
+
   /* http://lists.gnupg.org/pipermail/gcrypt-devel/2003-August/000458.html
    * Because you can't know in a library whether another library has
    * already initialized the library */
@@ -514,10 +516,23 @@ static void network_init_gcrypt (void) /* {{{ */
   *
   * tl;dr: keep all these gry_* statements in this exact order please. */
 # if GCRYPT_VERSION_NUMBER < 0x010600
-  gcry_control (GCRYCTL_SET_THREAD_CBS, &gcry_threads_pthread);
+  err = gcry_control (GCRYCTL_SET_THREAD_CBS, &gcry_threads_pthread);
+  if (err)
+  {
+    ERROR ("network plugin: gcry_control (GCRYCTL_SET_THREAD_CBS) failed: %s", gcry_strerror (err));
+    abort ();
+  }
 # endif
+
   gcry_check_version (NULL);
-  gcry_control (GCRYCTL_INIT_SECMEM, 32768);
+
+  err = gcry_control (GCRYCTL_INIT_SECMEM, 32768);
+  if (err)
+  {
+    ERROR ("network plugin: gcry_control (GCRYCTL_SET_THREAD_CBS) failed: %s", gcry_strerror (err));
+    abort ();
+  }
+
   gcry_control (GCRYCTL_INITIALIZATION_FINISHED);
 } /* }}} void network_init_gcrypt */
 
@@ -1050,14 +1065,6 @@ static int parse_part_sign_sha256 (sockent_t *se, /* {{{ */
   buffer_len = *ret_buffer_len;
   buffer_offset = 0;
 
-  if (se->data.server.userdb == NULL)
-  {
-    c_complain (LOG_NOTICE, &complain_no_users,
-        "network plugin: Received signed network packet but can't verify it "
-        "because no user DB has been configured. Will accept it.");
-    return (0);
-  }
-
   /* Check if the buffer has enough data for this structure. */
   if (buffer_len <= PART_SIGNATURE_SHA256_SIZE)
     return (-ENOMEM);
@@ -1073,6 +1080,18 @@ static int parse_part_sign_sha256 (sockent_t *se, /* {{{ */
   {
     ERROR ("network plugin: HMAC-SHA-256 with invalid length received.");
     return (-1);
+  }
+
+  if (se->data.server.userdb == NULL) 
+  {
+    c_complain (LOG_NOTICE, &complain_no_users,
+        "network plugin: Received signed network packet but can't verify it "
+        "because no user DB has been configured. Will accept it.");
+
+    *ret_buffer = buffer + pss_head_length;
+    *ret_buffer_len -= pss_head_length;
+
+    return (0);
   }
 
   /* Copy the hash. */
@@ -1444,6 +1463,7 @@ static int parse_packet (sockent_t *se, /* {{{ */
 				printed_ignore_warning = 1;
 			}
 			buffer = ((char *) buffer) + pkg_length;
+			buffer_size -= (size_t) pkg_length;
 			continue;
 		}
 #endif /* HAVE_LIBGCRYPT */
@@ -1471,6 +1491,7 @@ static int parse_packet (sockent_t *se, /* {{{ */
 				printed_ignore_warning = 1;
 			}
 			buffer = ((char *) buffer) + pkg_length;
+			buffer_size -= (size_t) pkg_length;
 			continue;
 		}
 #endif /* HAVE_LIBGCRYPT */
@@ -1612,6 +1633,7 @@ static int parse_packet (sockent_t *se, /* {{{ */
 			DEBUG ("network plugin: parse_packet: Unknown part"
 					" type: 0x%04hx", pkg_type);
 			buffer = ((char *) buffer) + pkg_length;
+			buffer_size -= (size_t) pkg_length;
 		}
 	} /* while (buffer_size > sizeof (part_header_t)) */
 
